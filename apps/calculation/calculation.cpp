@@ -1,6 +1,7 @@
 #include "calculation.h"
 #include "calculation_store.h"
 #include "../shared/poincare_helpers.h"
+#include "../global_preferences.h"
 #include <poincare/symbol.h>
 #include <poincare/undefined.h>
 #include <poincare/unreal.h>
@@ -55,7 +56,11 @@ void Calculation::setContent(const char * c, Context * context, Expression ansEx
   }
   Expression exactOutput;
   Expression approximateOutput;
-  PoincareHelpers::ParseAndSimplifyAndApproximate(m_inputText, &exactOutput, &approximateOutput, *context, false);
+  if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Activate) {
+    PoincareHelpers::ParseAndSimplifyAndApproximate(m_inputText, &exactOutput, &approximateOutput, *context, false);
+  } else {
+    PoincareHelpers::ParseAndSimplifyAndApproximate(m_inputText, &exactOutput, &approximateOutput, *context);
+  }
   PoincareHelpers::Serialize(exactOutput, m_exactOutputText, sizeof(m_exactOutputText));
   PoincareHelpers::Serialize(approximateOutput, m_approximateOutputText, sizeof(m_approximateOutputText));
 }
