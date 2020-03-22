@@ -1,13 +1,14 @@
 #include <poincare/square_root.h>
-#include <poincare/power.h>
 #include <poincare/addition.h>
-#include <poincare/subtraction.h>
-#include <poincare/layout_helper.h>
-#include <poincare/serialization_helper.h>
-#include <poincare/simplification_helper.h>
-#include <poincare/nth_root_layout.h>
 #include <poincare/division.h>
+#include <poincare/layout_helper.h>
+#include <poincare/nth_root_layout.h>
+#include <poincare/power.h>
+#include <poincare/serialization_helper.h>
 #include <poincare/sign_function.h>
+#include <poincare/subtraction.h>
+#include <poincare/undefined.h>
+
 #include <assert.h>
 #include <cmath>
 #include <ion.h>
@@ -29,35 +30,28 @@ int SquareRootNode::serialize(char * buffer, int bufferSize, Preferences::PrintF
 template<typename T>
 Complex<T> SquareRootNode::computeOnComplex(const std::complex<T> c, Preferences::ComplexFormat, Preferences::AngleUnit angleUnit) {
   std::complex<T> result = std::sqrt(c);
-  /* Openbsd trigonometric functions are numerical implementation and thus are
-   * approximative.
-   * The error epsilon is ~1E-7 on float and ~1E-15 on double. In order to avoid
-   * weird results as sqrt(-1) = 6E-16+i, we compute the argument of the result
-   * of sqrt(c) and if arg ~ 0 [Pi], we discard the residual imaginary part and
-   * if arg ~ Pi/2 [Pi], we discard the residual real part.*/
-  return Complex<T>::Builder(ApproximationHelper::TruncateRealOrImaginaryPartAccordingToArgument(result));
+  return Complex<T>::Builder(ApproximationHelper::NeglectRealOrImaginaryPartIfNeglectable(result, std::complex<T>(std::log(std::abs(c)), std::arg(c))));
 }
 
-Expression SquareRootNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return SquareRoot(this).shallowReduce(context, complexFormat, angleUnit, target);
+Expression SquareRootNode::shallowReduce(ReductionContext reductionContext) {
+  return SquareRoot(this).shallowReduce(reductionContext);
 }
 
-
-Expression SquareRoot::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ExpressionNode::ReductionTarget target) {
+Expression SquareRoot::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
-#if MATRIX_EXACT_REDUCING
-  if (childAtIndex(0).type() == ExpressionNode::Type::Matrix) {
-    return SimplificationHelper::Map(this, context, angleUnit);
+  Expression c = childAtIndex(0);
+  if (c.deepIsMatrix(reductionContext.context())) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
-  Power p = Power::Builder(childAtIndex(0), Rational::Builder(1, 2));
+  Power p = Power::Builder(c, Rational::Builder(1, 2));
   replaceWithInPlace(p);
-  return p.shallowReduce(context, complexFormat, angleUnit, target);
+  return p.shallowReduce(reductionContext);
 }
 
 }

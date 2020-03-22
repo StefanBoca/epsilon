@@ -1,13 +1,14 @@
 #include <escher/editable_text_cell.h>
 #include <escher/container.h>
 #include <escher/palette.h>
+#include <poincare/print_float.h>
 #include <assert.h>
 
-EditableTextCell::EditableTextCell(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * delegate, char * draftTextBuffer,
+EditableTextCell::EditableTextCell(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * delegate,
    const KDFont * font, float horizontalAlignment, float verticalAlignment, KDColor textColor, KDColor backgroundColor, KDCoordinate topMargin, KDCoordinate rightMargin, KDCoordinate bottomMargin, KDCoordinate leftMargin) :
   HighlightCell(),
   Responder(parentResponder),
-  m_textField(this, m_textBody, draftTextBuffer, TextField::maxBufferSize(), inputEventHandlerDelegate, delegate, true, font, horizontalAlignment, verticalAlignment, textColor, backgroundColor),
+  m_textField(this, m_textBody, Poincare::PrintFloat::k_maxFloatCharSize, TextField::maxBufferSize(), inputEventHandlerDelegate, delegate, font, horizontalAlignment, verticalAlignment, textColor, backgroundColor),
   m_topMargin(topMargin),
   m_rightMargin(rightMargin),
   m_bottomMargin(bottomMargin),
@@ -42,12 +43,13 @@ View * EditableTextCell::subviewAtIndex(int index) {
   return &m_textField;
 }
 
-void EditableTextCell::layoutSubviews() {
+void EditableTextCell::layoutSubviews(bool force) {
   KDRect cellBounds = bounds();
   m_textField.setFrame(KDRect(cellBounds.x() + m_leftMargin,
         cellBounds.y() + m_topMargin,
         cellBounds.width() - m_leftMargin - m_rightMargin,
-        cellBounds.height() - m_topMargin - m_bottomMargin));
+        cellBounds.height() - m_topMargin - m_bottomMargin),
+      force);
 }
 
 void EditableTextCell::didBecomeFirstResponder() {

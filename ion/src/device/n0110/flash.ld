@@ -22,6 +22,7 @@ MEMORY {
 }
 
 STACK_SIZE = 32K;
+FIRST_EXTERNAL_FLASH_SECTOR_SIZE = 4K;
 
 SECTIONS {
   .isr_vector_table ORIGIN(INTERNAL_FLASH) : {
@@ -52,7 +53,7 @@ SECTIONS {
    * flash. This way we can assert that there are no cross references from the
    * internal flash to the external flash. */
   .text.internal_to_external : {
-    *(.text._ZL22jump_to_external_flashv)
+    *(.text._ZL22jump_to_external_flashv*)
   } >INTERNAL_FLASH
 
   /* Use boot routine and required dependencies */
@@ -93,6 +94,7 @@ SECTIONS {
     *(.text._ZN3Ion6Device5Power20internalFlashStandbyEv)
     *(.text._ZN3Ion6Device5Power17enterLowPowerModeEv)
     *(.text._ZN3Ion6Device5Board14shutdownClocksEb)
+    *(.text._ZN3Ion6Device5Reset16coreWhilePluggedEv)
 
     /* 'suspend' dependencies '*/
     *(.text._ZN3Ion6Device5Power20internalFlashSuspendEb)
@@ -111,7 +113,16 @@ SECTIONS {
     /* 'start' dependencies */
     *(.rodata._ZN3Ion6Device4RegsL5GPIOAE)
     *(.rodata._ZN3Ion6Device4RegsL5GPIOBE)
+    *(.rodata._ZN3Ion6Device5Board4initEv.str1.4)
   } >INTERNAL_FLASH
+
+  .exam_mode_buffer ORIGIN(EXTERNAL_FLASH) : {
+    _exam_mode_buffer_start = .;
+    KEEP(*(.exam_mode_buffer))
+    /* Note: We don't increment "." here, we set it. */
+    . = ORIGIN(EXTERNAL_FLASH) + FIRST_EXTERNAL_FLASH_SECTOR_SIZE;
+    _exam_mode_buffer_end = .;
+  } >EXTERNAL_FLASH
 
   /* External flash memory */
   .text.external : {
@@ -184,6 +195,12 @@ SECTIONS {
     . = ALIGN(8);
     _stack_start = .;
   } >SRAM
+
+  /DISCARD/ : {
+    /* exidx and extab are needed for unwinding, which we don't use */
+    *(.ARM.exidx*)
+    *(.ARM.extab*)
+  }
 }
 
 NOCROSSREFS_TO(.text.external .text.internal);
@@ -194,3 +211,8 @@ NOCROSSREFS_TO(.text.external .isr_vector_table);
 NOCROSSREFS_TO(.rodata.external .isr_vector_table);
 NOCROSSREFS_TO(.text.external .header);
 NOCROSSREFS_TO(.rodata.external .header);
+
+NOCROSSREFS_TO(.exam_mode_buffer .text.internal);
+NOCROSSREFS_TO(.exam_mode_buffer .rodata.internal);
+NOCROSSREFS_TO(.exam_mode_buffer .isr_vector_table);
+NOCROSSREFS_TO(.exam_mode_buffer .header);

@@ -3,8 +3,8 @@ SFLAGS += -Ipython/port
 SFLAGS += -I$(BUILD_DIR)/python/port
 
 # How to maintain this Makefile
-# - Copy PY_CORE_O_BASENAME from py.mk into py_objs
-# - Copy select PY_EXTMOD_O_BASENAME from py.mk into extmod_objs
+# - Copy PY_CORE_O_BASENAME from py.mk into py_src
+# - Copy select PY_EXTMOD_O_BASENAME from py.mk into extmod_src
 # - Edit special-case workarounds below as needed
 
 py_src = $(addprefix python/src/py/,\
@@ -130,12 +130,14 @@ port_src += $(addprefix python/port/,\
   port.c \
   builtins.c \
   helpers.c \
+  mod/ion/modion.cpp \
+  mod/ion/modion_table.cpp \
   mod/kandinsky/modkandinsky.cpp \
-  mod/kandinsky/modkandinsky_table.cpp \
+  mod/kandinsky/modkandinsky_table.c \
   mod/time/modtime.c \
   mod/time/modtime_table.c \
   mod/turtle/modturtle.cpp \
-  mod/turtle/modturtle_table.cpp \
+  mod/turtle/modturtle_table.c \
   mod/turtle/turtle.cpp \
   mphalport.c \
 )
@@ -179,4 +181,6 @@ $(eval $(call rule_for, \
 
 $(call object_for,$(python_src)): $(BUILD_DIR)/python/port/genhdr/qstrdefs.generated.h
 
-src += $(python_src)
+tests_src += $(addprefix python/test/,\
+  mandelbrot.cpp \
+)

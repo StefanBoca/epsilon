@@ -12,18 +12,13 @@ using namespace Shared;
 
 namespace Statistics {
 
-StoreController::StoreController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Store * store, ButtonRowController * header) :
+StoreController::StoreController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Store * store, ButtonRowController * header, Context * parentContext) :
   Shared::StoreController(parentResponder, inputEventHandlerDelegate, store, header),
   m_titleCells{},
   m_store(store),
-  m_statisticsContext(m_store),
+  m_statisticsContext(m_store, parentContext),
   m_storeParameterController(this, store, this)
 {
-}
-
-StoreContext * StoreController::storeContext() {
-  m_statisticsContext.setParentContext(AppsContainer::sharedAppsContainer()->globalContext());
-  return &m_statisticsContext;
 }
 
 void StoreController::setFormulaLabel() {
@@ -39,12 +34,12 @@ bool StoreController::fillColumnWithFormula(Expression formula) {
 
 void StoreController::willDisplayCellAtLocation(HighlightCell * cell, int i, int j) {
   Shared::StoreController::willDisplayCellAtLocation(cell, i, j);
-  if (cellAtLocationIsEditable(i, j)) {
+  if (typeAtLocation(i, j) != k_titleCellType) {
     return;
   }
   Shared::StoreTitleCell * mytitleCell = static_cast<Shared::StoreTitleCell *>(cell);
   bool isValuesColumn = i%Store::k_numberOfColumnsPerSeries == 0;
-  mytitleCell->setSeparatorLeft(isValuesColumn);
+  mytitleCell->setSeparatorLeft(i > 0 && isValuesColumn);
   int seriesIndex = i/Store::k_numberOfColumnsPerSeries;
   assert(seriesIndex >= 0 && seriesIndex < DoublePairStore::k_numberOfSeries);
   if (isValuesColumn) {

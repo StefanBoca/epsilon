@@ -10,7 +10,7 @@ namespace Poincare {
 
 static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
 
-void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
    if (cursor->position() == LayoutCursor::Position::Left
        && (cursor->layoutNode() == numeratorLayout()
          || cursor->layoutNode() == denominatorLayout()))
@@ -34,7 +34,7 @@ void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldReco
   }
 }
 
-void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
    if (cursor->position() == LayoutCursor::Position::Right
        && (cursor->layoutNode() == numeratorLayout()
          || cursor->layoutNode() == denominatorLayout()))
@@ -57,13 +57,21 @@ void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+/* Select up/down
+ *                    9876
+ * Take for instance ------. If there is no selection ongoing, moving the cursor
+ *                    123    up should put it left of the 1. If 123/456 is
+ *                   |---    selected, moving the cursor up to select up should
+ *                    456    put the cursor left of the 9.
+ * */
+
+void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(denominatorLayout(), true)) {
     // If the cursor is inside denominator, move it to the numerator.
     numeratorLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
     return;
   }
-  if (cursor->layoutNode() == this) {
+  if (cursor->layoutNode() == this && !forSelection) {
     // If the cursor is Left or Right, move it to the numerator.
     cursor->setLayoutNode(numeratorLayout());
     return;
@@ -71,13 +79,13 @@ void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomp
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void FractionLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void FractionLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(numeratorLayout(), true)) {
     // If the cursor is inside numerator, move it to the denominator.
     denominatorLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
     return;
   }
-  if (cursor->layoutNode() == this){
+  if (cursor->layoutNode() == this && !forSelection) {
     // If the cursor is Left or Right, move it to the denominator.
     cursor->setLayoutNode(denominatorLayout());
     return;
@@ -123,46 +131,24 @@ int FractionLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Pr
     return -1;
   }
   buffer[bufferSize-1] = 0;
-  int numberOfChar = 0;
-  if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
+  if (bufferSize == 1) { return 0;}
 
-  int idxInParent = -1;
-  LayoutNode * p = parent();
-  if (p != nullptr) {
-    idxInParent = p->indexOfChild(this);
-  }
+  /* Add System parenthesis to detect omitted multiplication:
+   *   2
+   *  --- i --> [2/3]i instead of 2/3i
+   *   3
+   */
 
-  // Add a multiplication if omitted.
-  if (idxInParent > 0 && p->type() == Type::HorizontalLayout && p->childAtIndex(idxInParent - 1)->canBeOmittedMultiplicationLeftFactor()) {
-    numberOfChar+= SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointMiddleDot);
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
-  }
-
-  bool addParenthesis = false;
-  if (idxInParent >= 0 && idxInParent < (p->numberOfChildren() - 1) && p->type() == Type::HorizontalLayout && p->childAtIndex(idxInParent + 1)->type() == Type::VerticalOffsetLayout) {
-    addParenthesis = true;
-    // Add parenthesis
-    numberOfChar+= SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointLeftSystemParenthesis);
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
-  }
+  // Add system parenthesis
+  int numberOfChar = SerializationHelper::CodePoint(buffer, bufferSize, UCodePointLeftSystemParenthesis);
+  if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
   // Write the content of the fraction
   numberOfChar += SerializationHelper::Infix(this, buffer+numberOfChar, bufferSize-numberOfChar, floatDisplayMode, numberOfSignificantDigits, "/");
   if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
-  if (addParenthesis) {
-    // Add parenthesis
-    numberOfChar+= SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
-  }
-
-  // Add a multiplication if omitted.
-  if (idxInParent >= 0 && idxInParent < (p->numberOfChildren() - 1) && p->type() == Type::HorizontalLayout && p->childAtIndex(idxInParent + 1)->canBeOmittedMultiplicationRightFactor()) {
-    numberOfChar+= SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointMiddleDot);
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
-  }
-
-  buffer[numberOfChar] = 0;
+  // Add system parenthesis
+  numberOfChar+= SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
   return numberOfChar;
 }
 
@@ -210,7 +196,7 @@ KDPoint FractionLayoutNode::positionOfChild(LayoutNode * child) {
   return KDPoint(x, y);
 }
 
-void FractionLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void FractionLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   KDCoordinate fractionLineY = p.y() + numeratorLayout()->layoutSize().height() + k_fractionLineMargin;
   ctx->fillRect(KDRect(p.x()+Metric::FractionAndConjugateHorizontalMargin, fractionLineY, layoutSize().width()-2*Metric::FractionAndConjugateHorizontalMargin, k_fractionLineHeight), expressionColor);
 }

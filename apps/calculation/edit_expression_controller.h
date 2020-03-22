@@ -10,15 +10,14 @@
 #include "calculation_store.h"
 
 namespace Calculation {
-class HistoryController;
 
 /* TODO: implement a split view */
 class EditExpressionController : public ViewController, public Shared::TextFieldDelegate, public Shared::LayoutFieldDelegate {
 public:
   EditExpressionController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, HistoryController * historyController, CalculationStore * calculationStore);
-  View * view() override;
+  View * view() override { return &m_contentView; }
   void didBecomeFirstResponder() override;
-  void viewDidDisappear() override;
+  void viewWillAppear() override;
   void insertTextBody(const char * text);
 
   /* TextFieldDelegate */
@@ -39,14 +38,11 @@ private:
     void reload();
     TableView * mainView() { return m_mainView; }
     ExpressionField * expressionField() { return &m_expressionField; }
-    /* View */
+  private:
     int numberOfSubviews() const override { return 2; }
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
-  private:
-    static constexpr int k_bufferLength = TextField::maxBufferSize();
+    void layoutSubviews(bool force = false) override;
     TableView * m_mainView;
-    char m_textBody[k_bufferLength];
     ExpressionField m_expressionField;
   };
   void reloadView();
@@ -58,7 +54,6 @@ private:
   HistoryController * m_historyController;
   CalculationStore * m_calculationStore;
   ContentView m_contentView;
-  bool m_inputViewHeightIsMaximal;
 };
 
 }

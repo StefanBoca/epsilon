@@ -61,23 +61,23 @@ View * TitleBarView::subviewAtIndex(int index) {
   return &m_batteryView;
 }
 
-void TitleBarView::layoutSubviews() {
+void TitleBarView::layoutSubviews(bool force) {
   /* We here cheat to layout the main title. The application title is written
    * with upper cases. But, as upper letters are on the same baseline as lower
    * letters, they seem to be slightly above when they are perferctly centered
    * (because their glyph never cross the baseline). To avoid this effect, we
    * translate the frame of the title downwards.*/
-  m_titleView.setFrame(KDRect(0, 2, bounds().width(), bounds().height()-2));
-  m_preferenceView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, m_preferenceView.minimalSizeForOptimalDisplay().width(), bounds().height()));
+  m_titleView.setFrame(KDRect(0, 2, bounds().width(), bounds().height()-2), force);
+  m_preferenceView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, m_preferenceView.minimalSizeForOptimalDisplay().width(), bounds().height()), force);
   KDSize batterySize = m_batteryView.minimalSizeForOptimalDisplay();
-  m_batteryView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin, (bounds().height()- batterySize.height())/2, batterySize));
-  if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Activate) {
-    m_examModeIconView.setFrame(KDRect(k_examIconMargin, (bounds().height() - k_examIconHeight)/2, k_examIconWidth, k_examIconHeight));
+  m_batteryView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin, (bounds().height()- batterySize.height())/2, batterySize), force);
+  if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
+    m_examModeIconView.setFrame(KDRect(k_examIconMargin, (bounds().height() - k_examIconHeight)/2, k_examIconWidth, k_examIconHeight), force);
   } else {
-    m_examModeIconView.setFrame(KDRectZero);
+    m_examModeIconView.setFrame(KDRectZero, force);
   }
   KDSize shiftAlphaLockSize = m_shiftAlphaLockView.minimalSizeForOptimalDisplay();
-  m_shiftAlphaLockView.setFrame(KDRect(bounds().width()-batterySize.width()-Metric::TitleBarExternHorizontalMargin-k_alphaRightMargin-shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize));
+  m_shiftAlphaLockView.setFrame(KDRect(bounds().width()-batterySize.width()-Metric::TitleBarExternHorizontalMargin-k_alphaRightMargin-shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize), force);
 }
 
 void TitleBarView::refreshPreferences() {
@@ -85,15 +85,29 @@ void TitleBarView::refreshPreferences() {
   char buffer[bufferSize];
   int numberOfChar = 0;
   Preferences * preferences = Preferences::sharedPreferences();
-  if (preferences->displayMode() == Preferences::PrintFloatMode::Scientific) {
-    numberOfChar += strlcpy(buffer, I18n::translate(I18n::Message::Sci), bufferSize);
+  {
+    // Display Sci/ or Eng/ if the print float mode is not decimal
+    const Preferences::PrintFloatMode printFloatMode = preferences->displayMode();
+    if (printFloatMode != Preferences::PrintFloatMode::Decimal) {
+      // Check that there is no new print float mode, otherwise add its message
+      assert(printFloatMode == Preferences::PrintFloatMode::Scientific
+          || printFloatMode == Preferences::PrintFloatMode::Engineering);
+      I18n::Message printMessage = printFloatMode == Preferences::PrintFloatMode::Scientific ? I18n::Message::Sci : I18n::Message::Eng;
+      numberOfChar += strlcpy(buffer, I18n::translate(printMessage), bufferSize);
+      assert(numberOfChar < bufferSize-1);
+      assert(UTF8Decoder::CharSizeOfCodePoint('/') == 1);
+      buffer[numberOfChar++] = '/';
+    }
   }
-  if (preferences->angleUnit() == Preferences::AngleUnit::Radian) {
-    numberOfChar += strlcpy(buffer+numberOfChar, I18n::translate(I18n::Message::Rad), bufferSize - numberOfChar);
-  } else {
-    numberOfChar += strlcpy(buffer+numberOfChar, I18n::translate(I18n::Message::Deg), bufferSize - numberOfChar);
+  assert(numberOfChar <= bufferSize);
+  {
+    // Display the angle unit
+    const Preferences::AngleUnit angleUnit = preferences->angleUnit();
+    I18n::Message angleMessage = angleUnit == Preferences::AngleUnit::Degree ?
+        I18n::Message::Deg :
+        (angleUnit == Preferences::AngleUnit::Radian ? I18n::Message::Rad : I18n::Message::Gon);
+    numberOfChar += strlcpy(buffer+numberOfChar, I18n::translate(angleMessage), bufferSize - numberOfChar);
   }
-  buffer[numberOfChar] = 0;
   m_preferenceView.setText(buffer);
   // Layout the exam mode icon if needed
   layoutSubviews();

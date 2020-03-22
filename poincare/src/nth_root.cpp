@@ -11,6 +11,7 @@
 #include <poincare/serialization_helper.h>
 #include <assert.h>
 #include <cmath>
+#include <utility>
 
 namespace Poincare {
 
@@ -28,12 +29,12 @@ int NthRootNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloa
   return SerializationHelper::Prefix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, NthRoot::s_functionHelper.name());
 }
 
-Expression NthRootNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return NthRoot(this).shallowReduce(context, complexFormat, angleUnit, target);
+Expression NthRootNode::shallowReduce(ReductionContext reductionContext) {
+  return NthRoot(this).shallowReduce(reductionContext);
 }
 
 template<typename T>
-Evaluation<T> NthRootNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Evaluation<T> NthRootNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   Evaluation<T> base = childAtIndex(0)->approximate(T(), context, complexFormat, angleUnit);
   Evaluation<T> index = childAtIndex(1)->approximate(T(), context, complexFormat, angleUnit);
   Complex<T> result = Complex<T>::Undefined();
@@ -45,42 +46,34 @@ Evaluation<T> NthRootNode::templatedApproximate(Context& context, Preferences::C
     /* If the complexFormat is Real, we look for nthroot of form root(x,q) with
      * x real and q integer because they might have a real form which does not
      * correspond to the principale angle. */
-    if (complexFormat == Preferences::ComplexFormat::Real) {
+    if (complexFormat == Preferences::ComplexFormat::Real && indexc.imag() == 0.0 && std::round(indexc.real()) == indexc.real()) {
       // root(x, q) with q integer and x real
-      if (basec.imag() == 0.0 && indexc.imag() == 0.0 && std::round(indexc.real()) == indexc.real()) {
-        std::complex<T> absBasec = basec;
-        absBasec.real(std::fabs(absBasec.real()));
-        // compute root(|x|, q)
-        Complex<T> absBasePowIndex = PowerNode::compute(absBasec, std::complex<T>(1.0)/(indexc), complexFormat);
-        // q odd if (-1)^q = -1
-        if (std::pow((T)-1.0, (T)indexc.real()) < 0.0) {
-          return basec.real() < 0 ? Complex<T>::Builder(-absBasePowIndex.stdComplex()) : absBasePowIndex;
-        }
-      }
+      Complex<T> result = PowerNode::computeNotPrincipalRealRootOfRationalPow(basec, (T)1.0, indexc.real());
+       if (!result.isUndefined()) {
+         return result;
+       }
     }
     result = PowerNode::compute(basec, std::complex<T>(1.0)/(indexc), complexFormat);
   }
-  return result;
+  return std::move(result);
 }
 
 
-Expression NthRoot::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ExpressionNode::ReductionTarget target) {
+Expression NthRoot::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
     if (e.isUndefined()) {
       return e;
     }
   }
-#if MATRIX_EXACT_REDUCING
-  if (childAtIndex(0).type() == ExpressionNode::Type::Matrix || childAtIndex(1).type() == ExpressionNode:Type::Matrix) {
-    return Undefined::Builder();
+  if (childAtIndex(0).deepIsMatrix(reductionContext.context()) || childAtIndex(1).deepIsMatrix(reductionContext.context())) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
   Expression invIndex = Power::Builder(childAtIndex(1), Rational::Builder(-1));
   Power p = Power::Builder(childAtIndex(0), invIndex);
-  invIndex.shallowReduce(context, complexFormat, angleUnit, target);
+  invIndex.shallowReduce(reductionContext);
   replaceWithInPlace(p);
-  return p.shallowReduce(context, complexFormat, angleUnit, target);
+  return p.shallowReduce(reductionContext);
 }
 
 }

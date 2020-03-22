@@ -6,6 +6,7 @@
 #include <ion/console.h>
 #include <ion/display.h>
 #include <ion/events.h>
+#include <ion/exam_mode.h>
 #include <ion/keyboard.h>
 #include <ion/led.h>
 #include <ion/power.h>
@@ -23,7 +24,7 @@
  * Don't worry though, once all its initialization will be performed, ION will
  * jump to your code at ion_main, which you have to implement yourself. */
 
-void ion_main(int argc, char * argv[]);
+void ion_main(int argc, const char * const argv[]);
 
 namespace Ion {
 
@@ -44,7 +45,7 @@ uint32_t random();
 // Decompress data
 void decompress(const uint8_t * src, uint8_t * dst, int srcSize, int dstSize);
 
-// Tells wether the stack pointer is within acceptable bounds
+// Tells whether the stack pointer is within acceptable bounds
 bool stackSafe();
 
 }

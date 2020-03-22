@@ -5,7 +5,9 @@
 #define DUMMY_MAIN 0
 #if DUMMY_MAIN
 
-void ion_main(int argc, char * argv[]) {
+void ion_main(int argc, const char * const argv[]) {
+  // Initialize the backlight
+  Ion::Backlight::init();
   while (1) {
     Ion::Display::pushRectUniform(KDRect(0,0,10,10), KDColorRed);
     Ion::Timing::msleep(100);
@@ -16,7 +18,7 @@ void ion_main(int argc, char * argv[]) {
 
 #else
 
-void ion_main(int argc, char * argv[]) {
+void ion_main(int argc, const char * const argv[]) {
   // Initialize Poincare::TreePool::sharedPool
   Poincare::Init();
 

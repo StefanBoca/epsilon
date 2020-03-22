@@ -9,8 +9,9 @@ class RootGraphController : public CalculationGraphController {
 public:
   RootGraphController(Responder * parentResponder, GraphView * graphView, BannerView * bannerView, Shared::InteractiveCurveViewRange * curveViewRange, Shared::CurveViewCursor * cursor);
   const char * title() override;
+  TELEMETRY_ID("Root");
 private:
-  Poincare::Expression::Coordinate2D computeNewPointOfInterest(double start, double step, double max, Poincare::Context * context) override;
+  Poincare::Coordinate2D<double> computeNewPointOfInterest(double start, double step, double max, Poincare::Context * context) override;
 };
 
 }

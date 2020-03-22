@@ -15,8 +15,10 @@ public:
   ScriptNameCell(Responder * parentResponder = nullptr, TextFieldDelegate * delegate = nullptr) :
     EvenOddCell(),
     Responder(parentResponder),
-    m_textField(k_extensionLength, this, m_textBody, m_textBody, TextField::maxBufferSize(), nullptr, delegate, false)
-  {}
+    m_textField(k_extensionLength, this, m_textBody, TextField::maxBufferSize(), TextField::maxBufferSize(), nullptr, delegate)
+  {
+    m_textBody[0] = 0;
+  }
 
   Shared::TextFieldWithExtension * textField() { return &m_textField; }
 
@@ -46,7 +48,7 @@ private:
     assert(index == 0);
     return &m_textField;
   }
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
 
   Shared::TextFieldWithExtension m_textField;
   char m_textBody[TextField::maxBufferSize()];

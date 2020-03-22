@@ -52,7 +52,8 @@ mp_obj_t modkandinsky_color(mp_obj_t red, mp_obj_t green, mp_obj_t blue) {
 
 mp_obj_t modkandinsky_get_pixel(mp_obj_t x, mp_obj_t y) {
   KDPoint point(mp_obj_get_int(x), mp_obj_get_int(y));
-  KDColor c = KDIonContext::sharedContext()->getPixel(point);
+  KDColor c;
+  KDIonContext::sharedContext()->getPixel(point, &c);
   return TupleForRGB(c.red(), c.green(), c.blue());
 }
 
@@ -71,19 +72,39 @@ mp_obj_t modkandinsky_draw_string(size_t n_args, const mp_obj_t * args) {
   KDColor backgroundColor = (n_args >= 5) ? ColorForTuple(args[4]) : KDColorWhite;
   MicroPython::ExecutionEnvironment::currentExecutionEnvironment()->displaySandbox();
   KDIonContext::sharedContext()->drawString(text, point, KDFont::LargeFont, textColor, backgroundColor);
+  /* Before and after execution of "modkandinsky_draw_string",
+   * "micropython_port_vm_hook_loop" is called by "mp_execute_bytecode" and will
+   * call "micropython_port_interrupt_if_needed" every 20000 calls.
+   * However, "drawString" function might take some time to execute leading to
+   * drastically decrease the frequency of calls to
+   * "micropython_port_vm_hook_loop" and thus to
+   * "micropython_port_interrupt_if_needed". So we add an extra
+   * check for user interruption here. This way the user can still interrupt an
+   * infinite loop calling 'drawString' for instance. */
+  micropython_port_interrupt_if_needed();
   return mp_const_none;
 }
 
 mp_obj_t modkandinsky_fill_rect(size_t n_args, const mp_obj_t * args) {
-  KDRect rect(
-    mp_obj_get_int(args[0]),
-    mp_obj_get_int(args[1]),
-    mp_obj_get_int(args[2]),
-    mp_obj_get_int(args[3])
-  );
+  mp_int_t x = mp_obj_get_int(args[0]);
+  mp_int_t y = mp_obj_get_int(args[1]);
+  mp_int_t width = mp_obj_get_int(args[2]);
+  mp_int_t height = mp_obj_get_int(args[3]);
+  if (width < 0) {
+    width = -width;
+    x = x - width;
+  }
+  if (height < 0) {
+    height = -height;
+    y = y - height;
+  }
+  KDRect rect(x, y, width, height);
   KDColor color = ColorForTuple(args[4]);
+
   MicroPython::ExecutionEnvironment::currentExecutionEnvironment()->displaySandbox();
   KDIonContext::sharedContext()->fillRect(rect, color);
+  // Cf comment on modkandinsky_draw_string
+  micropython_port_interrupt_if_needed();
   return mp_const_none;
 }
 

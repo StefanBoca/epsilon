@@ -23,18 +23,18 @@ int PermuteCoefficientNode::serialize(char * buffer, int bufferSize, Preferences
   return SerializationHelper::Prefix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, PermuteCoefficient::s_functionHelper.name());
 }
 
-Expression PermuteCoefficientNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return PermuteCoefficient(this).shallowReduce();
+Expression PermuteCoefficientNode::shallowReduce(ReductionContext reductionContext) {
+  return PermuteCoefficient(this).shallowReduce(reductionContext.context());
 }
 
 template<typename T>
-Evaluation<T> PermuteCoefficientNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Evaluation<T> PermuteCoefficientNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   Evaluation<T> nInput = childAtIndex(0)->approximate(T(), context, complexFormat, angleUnit);
   Evaluation<T> kInput = childAtIndex(1)->approximate(T(), context, complexFormat, angleUnit);
   T n = nInput.toScalar();
   T k = kInput.toScalar();
   if (std::isnan(n) || std::isnan(k) || n != std::round(n) || k != std::round(k) || n < 0.0f || k < 0.0f) {
-    return Complex<T>::Undefined();
+    return Complex<T>::RealUndefined();
   }
   if (k > n) {
     return Complex<T>::Builder(0.0);
@@ -50,34 +50,29 @@ Evaluation<T> PermuteCoefficientNode::templatedApproximate(Context& context, Pre
 }
 
 
-Expression PermuteCoefficient::shallowReduce() {
+Expression PermuteCoefficient::shallowReduce(Context * context) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
   Expression c0 = childAtIndex(0);
   Expression c1 = childAtIndex(1);
-#if MATRIX_EXACT_REDUCING
-  if (c0.type() == ExpressionNode::Type::Matrix || c1.type() == ExpressionNode::Type::Matrix) {
-    return replaceWith(new Undefined::Builder(), true);
+  if (c0.deepIsMatrix(context) || c1.deepIsMatrix(context)) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
   if (c0.type() == ExpressionNode::Type::Rational) {
     Rational r0 = static_cast<Rational &>(c0);
-    if (!r0.integerDenominator().isOne() || r0.sign() == ExpressionNode::Sign::Negative) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r0.isInteger() || r0.sign() == ExpressionNode::Sign::Negative) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c1.type() == ExpressionNode::Type::Rational) {
     Rational r1 = static_cast<Rational &>(c1);
-    if (!r1.integerDenominator().isOne() || r1.sign() == ExpressionNode::Sign::Negative) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r1.isInteger() || r1.sign() == ExpressionNode::Sign::Negative) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c0.type() != ExpressionNode::Type::Rational || c1.type() != ExpressionNode::Type::Rational) {

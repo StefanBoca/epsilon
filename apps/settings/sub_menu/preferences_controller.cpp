@@ -12,6 +12,8 @@ using namespace Poincare;
 
 namespace Settings {
 
+static inline int maxInt(int x, int y) { return x > y ? x : y; }
+
 PreferencesController::PreferencesController(Responder * parentResponder) :
   GenericSubController(parentResponder)
 {
@@ -21,7 +23,6 @@ PreferencesController::PreferencesController(Responder * parentResponder) :
 }
 
 void PreferencesController::didBecomeFirstResponder() {
-  selectCellAtLocation(0, valueIndexForPreference(m_messageTreeModel->label()));
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
 }
 
@@ -51,7 +52,7 @@ int PreferencesController::reusableCellCount(int type) {
 Layout PreferencesController::layoutForPreferences(I18n::Message message) {
   switch (message) {
     // Angle Unit
-    case I18n::Message::Degres:
+    case I18n::Message::Degrees:
     {
       const char * degEx = "90°";
       return LayoutHelper::String(degEx, strlen(degEx), k_layoutFont);
@@ -60,13 +61,22 @@ Layout PreferencesController::layoutForPreferences(I18n::Message message) {
       return FractionLayout::Builder(
           CodePointLayout::Builder(UCodePointGreekSmallLetterPi, k_layoutFont),
           CodePointLayout::Builder('2', k_layoutFont));
-
+    case I18n::Message::Gradians:
+    {
+      const char * degEx = "100 gon";
+      return LayoutHelper::String(degEx, strlen(degEx), k_layoutFont);
+    }
     // Display Mode format
     case I18n::Message::Decimal:
-      return LayoutHelper::String("12.34", 5, k_layoutFont);
+      return LayoutHelper::String("0.1234", 6, k_layoutFont);
     case I18n::Message::Scientific:
     {
-      const char * text = "1.234ᴇ1";
+      const char * text = "1.234ᴇ-1";
+      return LayoutHelper::String(text, strlen(text), k_layoutFont);
+    }
+    case I18n::Message::Engineering:
+    {
+      const char * text = "123.4ᴇ-3";
       return LayoutHelper::String(text, strlen(text), k_layoutFont);
     }
 
@@ -96,6 +106,16 @@ Layout PreferencesController::layoutForPreferences(I18n::Message message) {
           VerticalOffsetLayout::Builder(LayoutHelper::String(superscript, strlen(superscript), k_layoutFont), VerticalOffsetLayoutNode::Position::Superscript)
         );
     }
+
+    // Font size
+    case I18n::Message::LargeFont:
+    case I18n::Message::SmallFont:
+    {
+      const char * text = "abc";
+      const KDFont * font = message == I18n::Message::LargeFont ? KDFont::LargeFont : KDFont::SmallFont;
+      return LayoutHelper::String(text, strlen(text), font);
+    }
+
     default:
       assert(false);
       return Layout();
@@ -119,15 +139,25 @@ void PreferencesController::setPreferenceWithValueIndex(I18n::Message message, i
   if (message == I18n::Message::AngleUnit) {
     preferences->setAngleUnit((Preferences::AngleUnit)valueIndex);
   } else if (message == I18n::Message::DisplayMode) {
-    preferences->setDisplayMode((Preferences::PrintFloatMode)valueIndex);
+    Preferences::PrintFloatMode mode = (Preferences::PrintFloatMode)valueIndex;
+    preferences->setDisplayMode(mode);
+    if (mode == Preferences::PrintFloatMode::Engineering) {
+      /* In Engineering mode, the number of significant digits cannot be lower
+       * than 3, because we need to be able to display 100 for instance. */
+      // TODO: Add warning about signifiant digits change ?
+      preferences->setNumberOfSignificantDigits(maxInt(preferences->numberOfSignificantDigits(), 3));
+    }
   } else if (message == I18n::Message::EditionMode) {
     preferences->setEditionMode((Preferences::EditionMode)valueIndex);
   } else if (message == I18n::Message::ComplexFormat) {
     preferences->setComplexFormat((Preferences::ComplexFormat)valueIndex);
+  } else if (message == I18n::Message::FontSizes) {
+    GlobalPreferences::sharedGlobalPreferences()->setFont(valueIndex == 0 ? KDFont::LargeFont : KDFont::SmallFont);
   }
+
 }
 
-int PreferencesController::valueIndexForPreference(I18n::Message message) {
+int PreferencesController::valueIndexForPreference(I18n::Message message) const {
   Preferences * preferences = Preferences::sharedPreferences();
   if (message == I18n::Message::AngleUnit) {
     return (int)preferences->angleUnit();
@@ -140,6 +170,9 @@ int PreferencesController::valueIndexForPreference(I18n::Message message) {
   }
   if (message == I18n::Message::ComplexFormat) {
     return (int)preferences->complexFormat();
+  }
+  if (message == I18n::Message::FontSizes) {
+    return GlobalPreferences::sharedGlobalPreferences()->font() == KDFont::LargeFont ? 0 : 1;
   }
   return 0;
 }

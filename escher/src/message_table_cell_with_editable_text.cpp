@@ -2,10 +2,10 @@
 #include <escher/palette.h>
 #include <escher/container.h>
 
-MessageTableCellWithEditableText::MessageTableCellWithEditableText(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * textFieldDelegate, char * draftTextBuffer, I18n::Message message) :
+MessageTableCellWithEditableText::MessageTableCellWithEditableText(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * textFieldDelegate, I18n::Message message) :
   Responder(parentResponder),
   MessageTableCell(message),
-  m_textField(this, m_textBody, draftTextBuffer, TextField::maxBufferSize(), inputEventHandlerDelegate, textFieldDelegate, true, KDFont::LargeFont, 1.0f, 0.5f)
+  m_textField(this, m_textBody, Poincare::PrintFloat::k_maxFloatCharSize, TextField::maxBufferSize(), inputEventHandlerDelegate, textFieldDelegate, KDFont::LargeFont, 1.0f, 0.5f)
 {
   m_textBody[0] = '\0';
 }
@@ -46,12 +46,17 @@ void MessageTableCellWithEditableText::setTextColor(KDColor color) {
   MessageTableCell::setTextColor(color);
 }
 
-void MessageTableCellWithEditableText::layoutSubviews() {
-  TableCell::layoutSubviews();
+void MessageTableCellWithEditableText::layoutSubviews(bool force) {
+  TableCell::layoutSubviews(force);
   KDSize textFieldSize = m_textField.minimalSizeForOptimalDisplay();
   KDSize labelSize = labelView()->minimalSizeForOptimalDisplay();
   /* Handle textfield that has no defined width (as their width evolves with
    * the length of edited text */
-  textFieldSize = KDSize(bounds().width() - 2*k_separatorThickness - labelSize.width()-2*k_labelMargin-k_accessoryMargin, textFieldSize.height());
-  m_textField.setFrame(KDRect(bounds().width() - textFieldSize.width() - k_separatorThickness-k_accessoryMargin, (bounds().height()-textFieldSize.height()-k_accessoryMargin)/2, textFieldSize.width(), textFieldSize.height()+k_accessoryMargin));
+  textFieldSize = KDSize(bounds().width() - 2*k_separatorThickness - labelSize.width()-2*labelMargin()-k_horizontalMargin, textFieldSize.height());
+  m_textField.setFrame(KDRect(
+    bounds().width() - textFieldSize.width() - k_separatorThickness-k_horizontalMargin,
+    (bounds().height()-textFieldSize.height()-k_horizontalMargin)/2,
+    textFieldSize.width(),
+    textFieldSize.height()+k_horizontalMargin),
+  force);
 }

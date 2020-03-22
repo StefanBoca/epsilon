@@ -8,7 +8,9 @@
 
 namespace Poincare {
 
-void VerticalOffsetLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+static inline int minInt(int x, int y) { return x < y ? x : y; }
+
+void VerticalOffsetLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == indiceLayout()
       && cursor->position() == LayoutCursor::Position::Left)
   {
@@ -31,7 +33,7 @@ void VerticalOffsetLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shou
   }
 }
 
-void VerticalOffsetLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void VerticalOffsetLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == indiceLayout()
       && cursor->position() == LayoutCursor::Position::Right)
   {
@@ -53,7 +55,7 @@ void VerticalOffsetLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * sho
   }
 }
 
-void VerticalOffsetLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void VerticalOffsetLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (m_position == Position::Superscript) {
     // Case: Superscript.
     if (cursor->isEquivalentTo(LayoutCursor(this, LayoutCursor::Position::Right))) {
@@ -68,20 +70,18 @@ void VerticalOffsetLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * should
       cursor->setPosition(LayoutCursor::Position::Left);
       return;
     }
-  }
-  /* Case: Subscript, Left or Right of the indice. Put the cursor at the same
-   * position, pointing this. */
-  if (m_position == Position::Subscript
-    && (cursor->isEquivalentTo(LayoutCursor(indiceLayout(), LayoutCursor::Position::Left))
-      || cursor->isEquivalentTo(LayoutCursor(indiceLayout(), LayoutCursor::Position::Right))))
-  {
+  } else {
+    if (cursor->isEquivalentTo(LayoutCursor(Layout(indiceLayout()), cursor->position()))) {
+      /* Case: Subscript, Left or Right of the indice. Put the cursor at the
+       * same position, pointing this. */
       cursor->setLayoutNode(this);
       return;
+    }
   }
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void VerticalOffsetLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void VerticalOffsetLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (m_position == Position::Subscript) {
     // Case: Subscript.
     if (cursor->isEquivalentTo(LayoutCursor(this, LayoutCursor::Position::Right))) {
@@ -96,14 +96,13 @@ void VerticalOffsetLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shou
       cursor->setPosition(LayoutCursor::Position::Left);
       return;
     }
-  }
-  /* Case: Superscript, Left or Right of the indice. Put the cursor at the same
-   * position, pointing this. */
-  if (m_position == Position::Superscript
-    && cursor->layoutNode() == indiceLayout())
-  {
-    cursor->setLayoutNode(this);
-    return;
+  } else {
+    if (cursor->isEquivalentTo(LayoutCursor(Layout(indiceLayout()), cursor->position()))){
+      /* Case: Superscript, Left or Right of the indice. Put the cursor at the
+       * same position, pointing this. */
+      cursor->setLayoutNode(this);
+      return;
+    }
   }
   LayoutNode::moveCursorDown(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
@@ -157,21 +156,18 @@ int VerticalOffsetLayoutNode::serialize(char * buffer, int bufferSize, Preferenc
     if (bufferSize == 1) {
       return 0;
     }
-    // If the layout is a subscript, write "_{indice}"
-    int numberOfChar = SerializationHelper::CodePoint(buffer, bufferSize, '_');
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
-    numberOfChar += SerializationHelper::CodePoint(buffer+numberOfChar, bufferSize-numberOfChar, '{');
+    // If the layout is a subscript, write "{indice}"
+    int numberOfChar = SerializationHelper::CodePoint(buffer, bufferSize, '{');
     if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
     numberOfChar += const_cast<VerticalOffsetLayoutNode *>(this)->indiceLayout()->serialize(buffer+numberOfChar, bufferSize-numberOfChar, floatDisplayMode, numberOfSignificantDigits);
     if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
     numberOfChar += SerializationHelper::CodePoint(buffer+numberOfChar, bufferSize-numberOfChar, '}');
-    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
-
-    return numberOfChar;
+    return minInt(numberOfChar, bufferSize-1);
   }
+
   assert(m_position == Position::Superscript);
   // If the layout is a superscript, write: '^' 'System(' indice 'System)'
   int numberOfChar = SerializationHelper::CodePoint(buffer, bufferSize, '^');
@@ -181,10 +177,7 @@ int VerticalOffsetLayoutNode::serialize(char * buffer, int bufferSize, Preferenc
   numberOfChar += const_cast<VerticalOffsetLayoutNode *>(this)->indiceLayout()->serialize(buffer+numberOfChar, bufferSize-numberOfChar, floatDisplayMode, numberOfSignificantDigits);
   if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
   numberOfChar += SerializationHelper::CodePoint(buffer+numberOfChar, bufferSize-numberOfChar, UCodePointRightSystemParenthesis);
-  if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
-
-  buffer[numberOfChar] = 0;
-  return numberOfChar;
+  return minInt(numberOfChar, bufferSize-1);
 }
 
 KDSize VerticalOffsetLayoutNode::computeSize() {

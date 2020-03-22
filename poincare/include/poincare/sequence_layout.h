@@ -14,13 +14,13 @@ public:
   using LayoutNode::LayoutNode;
 
   // LayoutNode
-  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
-  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
-  void moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited = false) override;
-  void moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited = false) override;
+  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
+  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
+  void moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited = false, bool forSelection = false) override;
+  void moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited = false, bool forSelection = false) override;
   void deleteBeforeCursor(LayoutCursor * cursor) override;
   LayoutNode * layoutToPointWhenInserting(Expression * correspondingExpression) override { return lowerBoundLayout(); }
-  CodePoint XNTCodePoint() const override { return 'n'; }
+  CodePoint XNTCodePoint(int childIndex = -1) const override;
 
   // TreeNode
   int numberOfChildren() const override { return 4; }
@@ -39,12 +39,14 @@ protected:
   KDPoint positionOfChild(LayoutNode * child) override;
 
   int writeDerivedClassInBuffer(const char * operatorName, char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const;
-  LayoutNode * argumentLayout() { return childAtIndex(0); }
-  LayoutNode * variableLayout() { return childAtIndex(1); }
+  LayoutNode * argumentLayout() { return childAtIndex(k_argumentLayoutIndex); }
+  LayoutNode * variableLayout() { return childAtIndex(k_variableLayoutIndex); }
   LayoutNode * lowerBoundLayout() { return childAtIndex(2); }
   LayoutNode * upperBoundLayout() { return childAtIndex(3); }
-  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) override;
+  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart = nullptr, Layout * selectionEnd = nullptr, KDColor selectionColor = KDColorRed) override;
 private:
+  static constexpr int k_argumentLayoutIndex = 0;
+  static constexpr int k_variableLayoutIndex = 1;
   KDCoordinate completeLowerBoundX();
   KDCoordinate subscriptBaseline();
 };

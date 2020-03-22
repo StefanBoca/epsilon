@@ -5,6 +5,19 @@
 /* MicroPython configuration options
  * We're not listing the default options as defined in mpconfig.h */
 
+#if __EMSCRIPTEN__
+// Enable a PyStack where most objects are allocated instead of always using the heap
+/* This enables to allocate and free memory in a scope (thus, Python can call
+ * Python) but also has the collateral effect of removing bugs regarding
+ * garbage collection on the web simulator. Indeed, fewer objetcts are
+ * allocated on the heap and the garbage collection is less frequently called.
+ * We suspect that garbage collection failed in javascript because when
+ * collecting roots the transpiled C code is denied access to Javascript
+ * variables that can store pointers to the Python heap. The pointed objects
+ * are therefore erased prematurely. */
+#define MICROPY_ENABLE_PYSTACK (1)
+#endif
+
 // Maximum length of a path in the filesystem
 #define MICROPY_ALLOC_PATH_MAX (32)
 
@@ -49,6 +62,9 @@
 
 // Whether to support property object
 #define MICROPY_PY_BUILTINS_PROPERTY (0)
+
+// Whether to support unicode strings
+#define MICROPY_PY_BUILTINS_STR_UNICODE (1)
 
 // Whether to set __file__ for imported modules
 #define MICROPY_PY___FILE__ (0)
@@ -112,11 +128,13 @@ typedef long mp_off_t;
 
 #define MP_STATE_PORT MP_STATE_VM
 
+extern const struct _mp_obj_module_t modion_module;
 extern const struct _mp_obj_module_t modkandinsky_module;
 extern const struct _mp_obj_module_t modtime_module;
 extern const struct _mp_obj_module_t modturtle_module;
 
 #define MICROPY_PORT_BUILTIN_MODULES \
+    { MP_ROM_QSTR(MP_QSTR_ion), MP_ROM_PTR(&modion_module) }, \
     { MP_ROM_QSTR(MP_QSTR_kandinsky), MP_ROM_PTR(&modkandinsky_module) }, \
     { MP_ROM_QSTR(MP_QSTR_time), MP_ROM_PTR(&modtime_module) }, \
     { MP_ROM_QSTR(MP_QSTR_turtle), MP_ROM_PTR(&modturtle_module) }, \

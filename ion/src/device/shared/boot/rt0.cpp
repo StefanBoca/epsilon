@@ -18,7 +18,7 @@ extern "C" {
   extern cxx_constructor _init_array_end;
 }
 
-void abort() {
+void __attribute__((noinline)) abort() {
 #if DEBUG
   while (1) {
   }
@@ -31,14 +31,12 @@ void abort() {
  * forbid inlining it.*/
 
 static void __attribute__((noinline)) external_flash_start() {
-  /* Init the peripherals. If there is the on boarding app, do not initialize the
-   * backlight so that the user does not see the LCD tests. The backlight will
-   * be initialized after the Power-On Self-Test.*/
-#if EPSILON_ONBOARDING_APP == 0
-  Ion::Device::Board::initPeripherals(true);
-#else
+  /* Init the peripherals. We do not initialize the backlight in case there is
+   * an on boarding app: indeed, we don't want the user to see the LCD tests
+   * happening during the on boarding app. The backlight will be initialized
+   * after the Power-On Self-Test if there is one or before switching to the
+   * home app otherwise. */
   Ion::Device::Board::initPeripherals(false);
-#endif
 
   return ion_main(0, nullptr);
 }
@@ -120,6 +118,6 @@ void __attribute__((noinline)) start() {
   abort();
 }
 
-void __attribute__((interrupt)) isr_systick() {
+void __attribute__((interrupt, noinline)) isr_systick() {
   Ion::Device::Timing::MillisElapsed++;
 }

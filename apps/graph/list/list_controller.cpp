@@ -9,7 +9,7 @@ using namespace Shared;
 
 namespace Graph {
 
-ListController::ListController(Responder * parentResponder, ButtonRowController * header, ButtonRowController * footer) :
+ListController::ListController(Responder * parentResponder, ButtonRowController * header, ButtonRowController * footer, InputEventHandlerDelegate * inputEventHandlerDelegate) :
   Shared::FunctionListController(parentResponder, header, footer, I18n::Message::AddFunction),
   m_functionTitleCells{ //TODO find better initialization
     TextFieldFunctionTitleCell(this),
@@ -19,7 +19,7 @@ ListController::ListController(Responder * parentResponder, ButtonRowController 
     TextFieldFunctionTitleCell(this),
   },
   m_expressionCells{},
-  m_parameterController(this, this, I18n::Message::FunctionColor, I18n::Message::DeleteFunction)
+  m_parameterController(this, this, I18n::Message::FunctionColor, I18n::Message::DeleteFunction, inputEventHandlerDelegate)
 {
   for (int i = 0; i < k_maxNumberOfDisplayableRows; i++) {
     m_expressionCells[i].setLeftMargin(k_expressionMargin);
@@ -49,17 +49,17 @@ bool ListController::textFieldDidFinishEditing(TextField * textField, const char
   assert(textField != nullptr);
   // Compute the new name
   size_t textLength = strlen(text);
-  size_t argumentLength = Function::k_parenthesedArgumentLength;
+  size_t argumentLength = UTF8Helper::HasCodePoint(text, UCodePointGreekSmallLetterTheta) ? Function::k_parenthesedThetaArgumentByteLength : Function::k_parenthesedXNTArgumentByteLength;
   constexpr int maxBaseNameSize = Function::k_maxNameWithArgumentSize;
   char baseName[maxBaseNameSize];
   if (textLength <= argumentLength) {
     // The user entered an empty name. Use a default function name.
-    CartesianFunction::DefaultName(baseName, maxBaseNameSize);
-    size_t defaultNameLength = strlen(baseName);
-    strlcpy(baseName + defaultNameLength, Function::k_parenthesedArgument, maxBaseNameSize - defaultNameLength);
-    textField->setText(baseName);
-    baseName[defaultNameLength] = 0;
+    ContinuousFunction::DefaultName(baseName, maxBaseNameSize);
+    /* We don't need to update the textfield edited text here because we are
+     * sure that the default name is compliant. It will thus lead to the end of
+     * edition and its content will be reloaded by willDisplayTitleCellAtIndex. */
   } else {
+    assert(argumentLength <= textLength + 1);
     strlcpy(baseName, text, textLength - argumentLength + 1);
   }
 
@@ -67,8 +67,8 @@ bool ListController::textFieldDidFinishEditing(TextField * textField, const char
   GlobalContext::DestroyRecordsBaseNamedWithoutExtension(baseName, Ion::Storage::funcExtension);
 
   // Set the name
-  Function::NameNotCompliantError nameError = Function::NameNotCompliantError::None;
-  Ion::Storage::Record::ErrorStatus error = Function::BaseNameCompliant(baseName, &nameError) ? modelStore()->recordAtIndex(m_selectableTableView.selectedRow()).setBaseNameWithExtension(baseName, Ion::Storage::funcExtension) : Ion::Storage::Record::ErrorStatus::NonCompliantName;
+  Function::NameNotCompliantError nameError = Function::BaseNameCompliant(baseName);
+  Ion::Storage::Record::ErrorStatus error = nameError == Function::NameNotCompliantError::None ? modelStore()->recordAtIndex(m_selectableTableView.selectedRow()).setBaseNameWithExtension(baseName, Ion::Storage::funcExtension) : Ion::Storage::Record::ErrorStatus::NonCompliantName;
 
   // Handle any error
   if (error == Ion::Storage::Record::ErrorStatus::None) {
@@ -118,7 +118,7 @@ bool ListController::textFieldDidAbortEditing(TextField * textField) {
   // Put the name column back to normal size
   computeTitlesColumnWidth();
   selectableTableView()->reloadData();
-  ExpiringPointer<Function> function = modelStore()->modelForRecord(modelStore()->recordAtIndex(selectedRow()));
+  ExpiringPointer<ContinuousFunction> function = modelStore()->modelForRecord(modelStore()->recordAtIndex(selectedRow()));
   setFunctionNameInTextField(function, textField);
   m_selectableTableView.selectedCell()->setHighlighted(true);
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
@@ -165,7 +165,7 @@ void ListController::willDisplayTitleCellAtIndex(HighlightCell * cell, int j) {
   titleCell->setBaseline(baseline(j));
   if (!titleCell->isEditing()) {
     // Set name and color if the name is not being edited
-    ExpiringPointer<Function> function = modelStore()->modelForRecord(modelStore()->recordAtIndex(j));
+    ExpiringPointer<ContinuousFunction> function = modelStore()->modelForRecord(modelStore()->recordAtIndex(j));
     setFunctionNameInTextField(function, titleCell->textField());
     KDColor functionNameColor = function->isActive() ? function->color() : Palette::GreyDark;
     titleCell->setColor(functionNameColor);
@@ -177,16 +177,20 @@ void ListController::willDisplayExpressionCellAtIndex(HighlightCell * cell, int 
   assert(j >= 0 && j < modelStore()->numberOfModels());
   Shared::FunctionListController::willDisplayExpressionCellAtIndex(cell, j);
   FunctionExpressionCell * myCell = (FunctionExpressionCell *)cell;
-  ExpiringPointer<Function> f = modelStore()->modelForRecord(modelStore()->recordAtIndex(j));
+  ExpiringPointer<ContinuousFunction> f = modelStore()->modelForRecord(modelStore()->recordAtIndex(j));
   KDColor textColor = f->isActive() ? KDColorBlack : Palette::GreyDark;
   myCell->setTextColor(textColor);
 }
 
-void ListController::setFunctionNameInTextField(ExpiringPointer<Function> function, TextField * textField) {
+void ListController::setFunctionNameInTextField(ExpiringPointer<ContinuousFunction> function, TextField * textField) {
   assert(textField != nullptr);
   char bufferName[BufferTextView::k_maxNumberOfChar];
-  function->nameWithArgument(bufferName, BufferTextView::k_maxNumberOfChar, modelStore()->symbol());
+  function->nameWithArgument(bufferName, BufferTextView::k_maxNumberOfChar);
   textField->setText(bufferName);
+}
+
+ContinuousFunctionStore * ListController::modelStore() {
+  return App::app()->functionStore();
 }
 
 }

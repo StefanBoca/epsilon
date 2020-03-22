@@ -16,7 +16,7 @@ public:
   // View
   int numberOfSubviews() const override;
   View * subviewAtIndex(int index) override;
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
 
   // Responder
   void didBecomeFirstResponder() override;
@@ -32,8 +32,10 @@ public:
   void setText(const char * text);
   bool insertText(const char * text);
   void setPrompt(const char * prompt);
+  const char * promptText() const { return m_promptView.text(); }
+  void clearAndReduceSize();
+  const char * shiftCurrentTextAndClear();
 private:
-  char m_textBuffer[TextField::maxBufferSize()];
   PointerTextView m_promptView;
   TextField m_textField;
 };

@@ -9,7 +9,7 @@ namespace Poincare {
 
 static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
 
-void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == upperBoundLayout())
   {
     assert(cursor->position() == LayoutCursor::Position::Left);
@@ -55,7 +55,7 @@ void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldReco
   }
 }
 
-void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == lowerBoundLayout()
         || cursor->layoutNode() == upperBoundLayout())
   {
@@ -94,7 +94,7 @@ void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(lowerBoundLayout(), true) || cursor->layoutNode()->hasAncestor(variableLayout(), true)) {
   // If the cursor is inside the lower bound or inside the variable name, move it to the upper bound
     upperBoundLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
@@ -114,7 +114,7 @@ void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomp
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void SequenceLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void SequenceLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(upperBoundLayout(), true)) {
     // If the cursor is inside the upper bound, move it to the lower bound
     lowerBoundLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
@@ -148,6 +148,9 @@ void SequenceLayoutNode::deleteBeforeCursor(LayoutCursor * cursor) {
   LayoutNode::deleteBeforeCursor(cursor);
 }
 
+CodePoint SequenceLayoutNode::XNTCodePoint(int childIndex) const {
+  return (childIndex == k_argumentLayoutIndex || childIndex == k_variableLayoutIndex) ? CodePoint('n') : UCodePointNull;
+}
 
 // Protected
 
@@ -212,28 +215,36 @@ int SequenceLayoutNode::writeDerivedClassInBuffer(const char * operatorName, cha
   int numberOfChar = strlcpy(buffer, operatorName, bufferSize);
   if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
-  // Write the opening parenthesis
+  /* Add system parentheses to avoid serializing:
+   *   2)+(1           2),1
+   *    ∑     (5)  or   π    (5)
+   *   n=1             n=1+binomial(3
+   */
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointLeftSystemParenthesis);
   if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
 
-    LayoutNode * argLayouts[] = {const_cast<SequenceLayoutNode *>(this)->argumentLayout(), const_cast<SequenceLayoutNode *>(this)->variableLayout(), const_cast<SequenceLayoutNode *>(this)->lowerBoundLayout(), const_cast<SequenceLayoutNode *>(this)->upperBoundLayout()};
+  LayoutNode * argLayouts[] = {const_cast<SequenceLayoutNode *>(this)->argumentLayout(), const_cast<SequenceLayoutNode *>(this)->variableLayout(), const_cast<SequenceLayoutNode *>(this)->lowerBoundLayout(), const_cast<SequenceLayoutNode *>(this)->upperBoundLayout()};
   for (uint8_t i = 0; i < sizeof(argLayouts)/sizeof(argLayouts[0]); i++) {
     if (i != 0) {
       // Write the comma
       numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, ',');
       if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
     }
+    // Write the child with system parentheses
+    numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointLeftSystemParenthesis);
+    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
     numberOfChar += argLayouts[i]->serialize(buffer+numberOfChar, bufferSize-numberOfChar, floatDisplayMode, numberOfSignificantDigits);
+    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
+    numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
     if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
   }
 
-  // Write the closing parenthesis
+  // Write the closing system parenthesis
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
-  buffer[numberOfChar] = 0;
   return numberOfChar;
 }
 
-void SequenceLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void SequenceLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   // Render the "="
   KDSize variableSize = variableLayout()->layoutSize();
   KDPoint equalPosition = positionOfChild(variableLayout()).translatedBy(KDPoint(variableSize.width(), variableLayout()->baseline()-k_font->stringSize(k_equal).height()/2));

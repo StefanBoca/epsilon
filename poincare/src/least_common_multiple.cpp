@@ -1,4 +1,5 @@
 #include <poincare/least_common_multiple.h>
+#include <poincare/approximation_helper.h>
 #include <poincare/rational.h>
 #include <poincare/undefined.h>
 #include <poincare/arithmetic.h>
@@ -21,32 +22,30 @@ int LeastCommonMultipleNode::serialize(char * buffer, int bufferSize, Preference
   return SerializationHelper::Prefix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, LeastCommonMultiple::s_functionHelper.name());
 }
 
-Expression LeastCommonMultipleNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return LeastCommonMultiple(this).shallowReduce();
+Expression LeastCommonMultipleNode::shallowReduce(ReductionContext reductionContext) {
+  return LeastCommonMultiple(this).shallowReduce(reductionContext.context());
 }
 
 template<typename T>
-Evaluation<T> LeastCommonMultipleNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
-  Evaluation<T> f1Input = childAtIndex(0)->approximate(T(), context, complexFormat, angleUnit);
-  Evaluation<T> f2Input = childAtIndex(1)->approximate(T(), context, complexFormat, angleUnit);
-  T f1 = f1Input.toScalar();
-  T f2 = f2Input.toScalar();
-  if (std::isnan(f1) || std::isnan(f2) || f1 != (int)f1 || f2 != (int)f2) {
-    return Complex<T>::Undefined();
+Evaluation<T> LeastCommonMultipleNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+  bool isUndefined = false;
+  int a = ApproximationHelper::PositiveIntegerApproximationIfPossible<T>(childAtIndex(0), &isUndefined, context, complexFormat, angleUnit);
+  int b = ApproximationHelper::PositiveIntegerApproximationIfPossible<T>(childAtIndex(1), &isUndefined, context, complexFormat, angleUnit);
+  if (isUndefined) {
+    return Complex<T>::RealUndefined();
   }
-  if (f1 == 0.0f || f2 == 0.0f) {
+  if (a == 0 || b == 0) {
     return Complex<T>::Builder(0.0);
   }
-  int a = (int)f2;
-  int b = (int)f1;
-  if (f1 > f2) {
+  if (b > a) {
+    int temp = b;
     b = a;
-    a = (int)f1;
+    a = temp;
   }
   int product = a*b;
   int r = 0;
   while((int)b!=0){
-    r = a - ((int)(a/b))*b;
+    r = a - (a/b)*b;
     a = b;
     b = r;
   }
@@ -54,34 +53,29 @@ Evaluation<T> LeastCommonMultipleNode::templatedApproximate(Context& context, Pr
 }
 
 
-Expression LeastCommonMultiple::shallowReduce() {
+Expression LeastCommonMultiple::shallowReduce(Context * context) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
   Expression c0 = childAtIndex(0);
   Expression c1 = childAtIndex(1);
-#if MATRIX_EXACT_REDUCING
-  if (c0.type() == Type::Matrix || c1.type() == Type::Matrix) {
-    return Undefined::Builder();
+  if (c0.deepIsMatrix(context) || c1.deepIsMatrix(context)) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
   if (c0.type() == ExpressionNode::Type::Rational) {
     Rational r0 = static_cast<Rational &>(c0);
-    if (!r0.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r0.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c1.type() == ExpressionNode::Type::Rational) {
     Rational r1 = static_cast<Rational &>(c1);
-    if (!r1.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r1.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c0.type() != ExpressionNode::Type::Rational || c1.type() != ExpressionNode::Type::Rational) {

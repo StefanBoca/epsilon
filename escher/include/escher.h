@@ -39,6 +39,7 @@
 #include <escher/message_table_cell.h>
 #include <escher/message_table_cell_with_buffer.h>
 #include <escher/message_table_cell_with_chevron.h>
+#include <escher/message_table_cell_with_chevron_and_buffer.h>
 #include <escher/message_table_cell_with_chevron_and_message.h>
 #include <escher/message_table_cell_with_chevron_and_expression.h>
 #include <escher/message_table_cell_with_editable_text.h>
@@ -57,6 +58,7 @@
 #include <escher/scroll_view_data_source.h>
 #include <escher/scroll_view_indicator.h>
 #include <escher/scrollable_view.h>
+#include <escher/scrollable_expression_view.h>
 #include <escher/selectable_table_view.h>
 #include <escher/selectable_table_view_data_source.h>
 #include <escher/selectable_table_view_delegate.h>

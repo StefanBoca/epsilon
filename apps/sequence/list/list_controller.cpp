@@ -27,22 +27,20 @@ const char * ListController::title() {
   return I18n::translate(I18n::Message::SequenceTab);
 }
 
-int ListController::numberOfExpressionRows() {
+int ListController::numberOfExpressionRows() const {
   int numberOfRows = 0;
-  for (int i = 0; i < modelStore()->numberOfModels(); i++) {
-    Sequence * sequence = modelStore()->modelForRecord(modelStore()->recordAtIndex(i));
+  SequenceStore * store = const_cast<ListController *>(this)->modelStore();
+  const int modelsCount = store->numberOfModels();
+  for (int i = 0; i < modelsCount; i++) {
+    Sequence * sequence = store->modelForRecord(store->recordAtIndex(i));
     numberOfRows += sequence->numberOfElements();
   }
-  if (modelStore()->numberOfModels() == modelStore()->maxNumberOfModels()) {
-    return numberOfRows;
-  }
-  return 1 + numberOfRows;
+  return numberOfRows + (modelsCount == store->maxNumberOfModels()? 0 : 1);
 };
 
 KDCoordinate ListController::expressionRowHeight(int j) {
   KDCoordinate defaultHeight = Metric::StoreRowHeight;
-  if (modelStore()->numberOfModels() < modelStore()->maxNumberOfModels() && j == numberOfRows() - 1) {
-    // Add sequence row
+  if (isAddEmptyRow(j)) {
     return defaultHeight;
   }
   Sequence * sequence = modelStore()->modelForRecord(modelStore()->recordAtIndex(modelIndexForRow(j)));
@@ -89,9 +87,9 @@ void ListController::selectPreviousNewSequenceCell() {
 void ListController::editExpression(int sequenceDefinition, Ion::Events::Event event) {
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   Sequence * sequence = modelStore()->modelForRecord(record);
-  char * initialText = nullptr;
-  char initialTextContent[TextField::maxBufferSize()];
+  InputViewController * inputController = Shared::FunctionApp::app()->inputViewController();
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+    char initialTextContent[Constant::MaxSerializedExpressionSize];
     switch (sequenceDefinition) {
       case 0:
         sequence->text(initialTextContent, sizeof(initialTextContent));
@@ -103,16 +101,13 @@ void ListController::editExpression(int sequenceDefinition, Ion::Events::Event e
         sequence->secondInitialConditionText(initialTextContent, sizeof(initialTextContent));
         break;
     }
-    initialText = initialTextContent;
-    // Replace UCodePointUnknownN with 'n'
-    replaceUnknownSymbolWithReadableSymbol(initialText);
+    inputController->setTextBody(initialTextContent);
   }
-  InputViewController * inputController = Shared::FunctionApp::app()->inputViewController();
   // Invalidate the sequences context cache
   App::app()->localContext()->resetCache();
   switch (sequenceDefinition) {
     case 0:
-      inputController->edit(this, event, this, initialText,
+      inputController->edit(this, event, this,
         [](void * context, void * sender){
         ListController * myController = static_cast<ListController *>(context);
         InputViewController * myInputViewController = (InputViewController *)sender;
@@ -124,7 +119,7 @@ void ListController::editExpression(int sequenceDefinition, Ion::Events::Event e
       });
       break;
   case 1:
-    inputController->edit(this, event, this, initialText,
+    inputController->edit(this, event, this,
       [](void * context, void * sender){
       ListController * myController = static_cast<ListController *>(context);
       InputViewController * myInputViewController = (InputViewController *)sender;
@@ -136,7 +131,7 @@ void ListController::editExpression(int sequenceDefinition, Ion::Events::Event e
     });
     break;
   default:
-    inputController->edit(this, event, this, initialText,
+    inputController->edit(this, event, this,
       [](void * context, void * sender){
       ListController * myController = static_cast<ListController *>(context);
       InputViewController * myInputViewController = (InputViewController *)sender;
@@ -154,7 +149,8 @@ bool ListController::editInitialConditionOfSelectedRecordWithText(const char * t
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   Sequence * sequence = modelStore()->modelForRecord(record);
-  Ion::Storage::Record::ErrorStatus error = firstInitialCondition? sequence->setFirstInitialConditionContent(text) : sequence->setSecondInitialConditionContent(text);
+  Context * context = App::app()->localContext();
+  Ion::Storage::Record::ErrorStatus error = firstInitialCondition? sequence->setFirstInitialConditionContent(text, context) : sequence->setSecondInitialConditionContent(text, context);
   return (error == Ion::Storage::Record::ErrorStatus::None);
 }
 
@@ -234,10 +230,6 @@ int ListController::modelIndexForRow(int j) {
   return sequenceIndex;
 }
 
-bool ListController::isAddEmptyRow(int j) {
-  return modelStore()->numberOfModels() < modelStore()->maxNumberOfModels() && j == numberOfRows() - 1;
-}
-
 int ListController::sequenceDefinitionForRow(int j) {
   if (j < 0) {
     return j;
@@ -274,19 +266,19 @@ void ListController::reinitSelectedExpression(ExpiringPointer<ExpressionModelHan
       if (sequence->firstInitialConditionExpressionClone().isUninitialized()) {
         return;
       }
-      sequence->setFirstInitialConditionContent("");
+      sequence->setFirstInitialConditionContent("", nullptr); // No context needed here
       break;
     case 2:
       if (sequence->secondInitialConditionExpressionClone().isUninitialized()) {
         return;
       }
-      sequence->setSecondInitialConditionContent("");
+      sequence->setSecondInitialConditionContent("", nullptr); // No context needed here
       break;
     default:
       if (sequence->expressionClone().isUninitialized()) {
         return;
       }
-      sequence->setContent("");
+      sequence->setContent("", nullptr); // No context needed
       break;
   }
   selectableTableView()->reloadData();
@@ -297,6 +289,10 @@ bool ListController::removeModelRow(Ion::Storage::Record record) {
   // Invalidate the sequences context cache
   App::app()->localContext()->resetCache();
   return true;
+}
+
+SequenceStore * ListController::modelStore() {
+  return App::app()->functionStore();
 }
 
 }

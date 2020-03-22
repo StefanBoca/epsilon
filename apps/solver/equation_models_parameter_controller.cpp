@@ -1,9 +1,9 @@
 #include "equation_models_parameter_controller.h"
 #include "list_controller.h"
-#include "../constant.h"
-#include <assert.h>
 #include <poincare/layout_helper.h>
+#include <poincare/preferences.h>
 #include <apps/i18n.h>
+#include <assert.h>
 
 using namespace Poincare;
 
@@ -22,9 +22,10 @@ EquationModelsParameterController::EquationModelsParameterController(Responder *
   m_selectableTableView.setMargins(0);
   m_selectableTableView.setDecoratorType(ScrollView::Decorator::Type::None);
   for (int i = 0; i < k_numberOfExpressionCells; i++) {
-    Poincare::Expression e = Expression::Parse(k_models[i+1]);
-    m_layouts[i] = e.createLayout(Poincare::Preferences::PrintFloatMode::Decimal, Constant::ShortNumberOfSignificantDigits);
+    Poincare::Expression e = Expression::Parse(k_models[i+1], nullptr); // No context needed
+    m_layouts[i] = e.createLayout(Poincare::Preferences::PrintFloatMode::Decimal, Preferences::ShortNumberOfSignificantDigits);
     m_modelCells[i].setLayout(m_layouts[i]);
+    m_modelCells[i].setParentResponder(&m_selectableTableView);
   }
 }
 
@@ -60,7 +61,7 @@ bool EquationModelsParameterController::handleEvent(Ion::Events::Event event) {
   return false;
 }
 
-int EquationModelsParameterController::numberOfRows() {
+int EquationModelsParameterController::numberOfRows() const {
   return k_numberOfExpressionCells+1;
 };
 

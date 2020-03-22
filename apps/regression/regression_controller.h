@@ -15,6 +15,7 @@ public:
   // ViewController
   const char * title() override;
   View * view() override { return &m_selectableTableView; }
+  TELEMETRY_ID("Regression");
 
   // Responder
   bool handleEvent(Ion::Events::Event event) override;
@@ -27,7 +28,7 @@ public:
   HighlightCell * reusableCell(int index, int type) override;
   int reusableCellCount(int type) override { return k_numberOfCells; }
   int typeAtLocation(int i, int j) override { return 0; }
-  int numberOfRows() override { return k_numberOfRows; }
+  int numberOfRows() const override { return k_numberOfRows; }
   void willDisplayCellAtLocation(HighlightCell * cell, int i, int j) override;
 private:
   constexpr static int k_numberOfRows = 9;

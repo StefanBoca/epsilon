@@ -1,16 +1,17 @@
 #include <poincare/number.h>
+#include <poincare/based_integer.h>
 #include <poincare/decimal.h>
+#include <poincare/float.h>
+#include <poincare/infinity.h>
 #include <poincare/integer.h>
 #include <poincare/rational.h>
-#include <poincare/float.h>
 #include <poincare/undefined.h>
-#include <poincare/infinity.h>
-
 extern "C" {
 #include <stdlib.h>
 #include <assert.h>
 }
 #include <cmath>
+#include <utility>
 
 namespace Poincare {
 
@@ -31,6 +32,8 @@ double NumberNode::doubleApproximation() const {
       }
     case Type::Rational:
       return static_cast<const RationalNode *>(this)->templatedApproximate<double>();
+    case Type::BasedInteger:
+      return static_cast<const BasedIntegerNode *>(this)->templatedApproximate<double>();
     default:
       assert(false);
       return 0.0;
@@ -42,7 +45,7 @@ Number Number::ParseNumber(const char * integralPart, size_t integralLength, con
   if (exponentLength == 0 && decimalLenght == 0) {
     Integer i(integralPart, integralLength, false);
     if (!i.isOverflow()) {
-      return Rational::Builder(i);
+      return BasedInteger::Builder(i, Integer::Base::Decimal);
     }
   }
   int exp;
@@ -89,7 +92,7 @@ Number Number::BinaryOperation(const Number & i, const Number & j, RationalBinar
     // Rational + Rational
     Rational a = rationalOp(static_cast<const Rational&>(i), static_cast<const Rational&>(j));
     if (!a.numeratorOrDenominatorIsInfinity()) {
-      return a;
+      return std::move(a);
     }
   }
   /* At least one of the operands is Undefined/Infinity/Float, or the Rational
@@ -110,7 +113,7 @@ Number Number::Power(const Number & i, const Number & j) {
   return BinaryOperation(i, j,
       // Special case for Rational^Rational: we escape to Float if the index is not an Integer
       [](const Rational & i, const Rational & j) {
-        if (!j.integerDenominator().isOne()) {
+        if (!j.isInteger()) {
           // We return an overflown result to reach the escape case Float+Float
           return Rational::Builder(Integer::Overflow(false));
         }

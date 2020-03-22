@@ -10,7 +10,7 @@ namespace Probability {
 
 class ResponderImageCell : public HighlightCell, public Responder {
 public:
-  ResponderImageCell(Responder * parentResponder, Law * law, Calculation * calculation, CalculationController * calculationController);
+  ResponderImageCell(Responder * parentResponder, Distribution * distribution, Calculation * calculation, CalculationController * calculationController);
   Responder * responder() override {
     return this;
   }
@@ -25,7 +25,7 @@ public:
 private:
   int numberOfSubviews() const override;
   View * subviewAtIndex(int index) override;
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
   ImageCell m_imageCell;
   CalculationTypeController m_calculationTypeController;
 };

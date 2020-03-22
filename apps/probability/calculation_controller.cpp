@@ -1,5 +1,4 @@
 #include "calculation_controller.h"
-#include "../constant.h"
 #include "../shared/poincare_helpers.h"
 #include "app.h"
 #include "calculation/discrete_calculation.h"
@@ -14,6 +13,7 @@
 #include "images/focused_calcul2_icon.h"
 #include "images/focused_calcul3_icon.h"
 #include "images/focused_calcul4_icon.h"
+#include <poincare/preferences.h>
 #include <assert.h>
 #include <cmath>
 
@@ -24,10 +24,10 @@ namespace Probability {
 
 static inline int minInt(int x, int y) { return x < y ? x : y; }
 
-CalculationController::ContentView::ContentView(SelectableTableView * selectableTableView, Law * law, Calculation * calculation) :
+CalculationController::ContentView::ContentView(SelectableTableView * selectableTableView, Distribution * distribution, Calculation * calculation) :
   m_titleView(KDFont::SmallFont, I18n::Message::ComputeProbability, 0.5f, 0.5f, Palette::GreyDark, Palette::WallScreen),
   m_selectableTableView(selectableTableView),
-  m_lawCurveView(law, calculation)
+  m_distributionCurveView(distribution, calculation)
 {
 }
 
@@ -43,27 +43,26 @@ View * CalculationController::ContentView::subviewAtIndex(int index) {
   if (index == 1) {
     return m_selectableTableView;
   }
-  return &m_lawCurveView;
+  return &m_distributionCurveView;
 }
 
-void CalculationController::ContentView::layoutSubviews() {
+void CalculationController::ContentView::layoutSubviews(bool force) {
   KDCoordinate titleHeight = KDFont::SmallFont->glyphSize().height()+k_titleHeightMargin;
-  m_titleView.setFrame(KDRect(0, 0, bounds().width(), titleHeight));
+  m_titleView.setFrame(KDRect(0, 0, bounds().width(), titleHeight), force);
   KDCoordinate calculationHeight = ResponderImageCell::k_oneCellHeight+2*k_tableMargin;
-  m_selectableTableView->setFrame(KDRect(0,  titleHeight, bounds().width(), calculationHeight));
-  m_lawCurveView.setFrame(KDRect(0,  titleHeight+calculationHeight, bounds().width(), bounds().height() - calculationHeight - titleHeight));
+  m_selectableTableView->setFrame(KDRect(0,  titleHeight, bounds().width(), calculationHeight), force);
+  m_distributionCurveView.setFrame(KDRect(0,  titleHeight+calculationHeight, bounds().width(), bounds().height() - calculationHeight - titleHeight), force);
 }
 
-CalculationController::CalculationController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Law * law, Calculation * calculation) :
+CalculationController::CalculationController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Distribution * distribution, Calculation * calculation) :
   ViewController(parentResponder),
-  m_contentView(&m_selectableTableView, law, calculation),
+  m_contentView(&m_selectableTableView, distribution, calculation),
   m_selectableTableView(this),
-  m_imageCell(&m_selectableTableView, law, calculation, this),
-  m_draftTextBuffer{},
+  m_imageCell(&m_selectableTableView, distribution, calculation, this),
   m_calculation(calculation),
-  m_law(law)
+  m_distribution(distribution)
 {
-  assert(law != nullptr);
+  assert(distribution != nullptr);
   assert(calculation != nullptr);
   m_selectableTableView.setMargins(k_tableMargin);
   m_selectableTableView.setVerticalCellOverlap(0);
@@ -74,14 +73,13 @@ CalculationController::CalculationController(Responder * parentResponder, InputE
   for (int i = 0; i < k_numberOfCalculationCells; i++) {
     m_calculationCells[i].editableTextCell()->setParentResponder(&m_selectableTableView);
     m_calculationCells[i].editableTextCell()->textField()->setDelegates(inputEventHandlerDelegate, this);
-    m_calculationCells[i].editableTextCell()->textField()->setDraftTextBuffer(m_draftTextBuffer);
   }
 }
 
 void CalculationController::didEnterResponderChain(Responder * previousResponder) {
   App::app()->snapshot()->setActivePage(App::Snapshot::Page::Calculations);
   updateTitle();
-  reloadLawCurveView();
+  reloadDistributionCurveView();
   m_selectableTableView.reloadData();
 }
 
@@ -107,11 +105,11 @@ void CalculationController::viewDidDisappear() {
   ViewController::viewDidDisappear();
 }
 
-int CalculationController::numberOfRows() {
+int CalculationController::numberOfRows() const {
   return 1;
 }
 
-int CalculationController::numberOfColumns() {
+int CalculationController::numberOfColumns() const {
   return m_calculation->numberOfParameters()+1;
 }
 
@@ -173,7 +171,7 @@ void CalculationController::willDisplayCellAtLocation(HighlightCell * cell, int 
     CalculationCell * myCell = static_cast<CalculationCell *>(cell);
     myCell->messageTextView()->setMessage(m_calculation->legendForParameterAtIndex(i-1));
     bool calculationCellIsResponder = true;
-    if ((m_law->type() != Law::Type::Normal && i == 3) || (m_calculation->type() == Calculation::Type::Discrete && i == 2)) {
+    if ((m_distribution->type() != Distribution::Type::Normal && i == 3) || (m_calculation->type() == Calculation::Type::Discrete && i == 2)) {
       calculationCellIsResponder = false;
     }
     myCell->setResponder(calculationCellIsResponder);
@@ -181,8 +179,11 @@ void CalculationController::willDisplayCellAtLocation(HighlightCell * cell, int 
     if (field->isEditing()) {
       return;
     }
-    char buffer[PrintFloat::bufferSizeForFloatsWithPrecision(Constant::LargeNumberOfSignificantDigits)];
-    PrintFloat::convertFloatToText<double>(m_calculation->parameterAtIndex(i-1), buffer, PrintFloat::bufferSizeForFloatsWithPrecision(Constant::LargeNumberOfSignificantDigits), Constant::LargeNumberOfSignificantDigits, Preferences::PrintFloatMode::Decimal);
+    constexpr int precision = Preferences::LargeNumberOfSignificantDigits;
+    constexpr int bufferSize = PrintFloat::charSizeForFloatsWithPrecision(precision);
+    char buffer[bufferSize];
+    // FIXME: Leo has not decided yet if we should use the prefered mode instead of always using scientific mode
+    PoincareHelpers::ConvertFloatToTextWithDisplayMode<double>(m_calculation->parameterAtIndex(i-1), buffer, bufferSize, precision, Preferences::PrintFloatMode::Decimal);
     field->setText(buffer);
   }
 }
@@ -222,7 +223,7 @@ bool CalculationController::textFieldDidFinishEditing(TextField * textField, con
       floatBody = 1.0;
     }
   }
-  if (!m_law->isContinuous() && (selectedColumn() == 1 || m_calculation->type() == Calculation::Type::FiniteIntegral)) {
+  if (!m_distribution->isContinuous() && (selectedColumn() == 1 || m_calculation->type() == Calculation::Type::FiniteIntegral)) {
     floatBody = std::round(floatBody);
   }
   m_calculation->setParameterAtIndex(floatBody, selectedColumn()-1);
@@ -233,13 +234,13 @@ bool CalculationController::textFieldDidFinishEditing(TextField * textField, con
   return true;
 }
 
-void CalculationController::reloadLawCurveView() {
-  m_contentView.lawCurveView()->reload();
+void CalculationController::reloadDistributionCurveView() {
+  m_contentView.distributionCurveView()->reload();
 }
 
 void CalculationController::reload() {
   m_selectableTableView.reloadData();
-  reloadLawCurveView();
+  reloadDistributionCurveView();
 }
 
 void CalculationController::setCalculationAccordingToIndex(int index, bool forceReinitialisation) {
@@ -263,18 +264,18 @@ void CalculationController::setCalculationAccordingToIndex(int index, bool force
     default:
      return;
   }
-  m_calculation->setLaw(m_law);
+  m_calculation->setDistribution(m_distribution);
 }
 
 void CalculationController::updateTitle() {
   int currentChar = 0;
-  for (int index = 0; index < m_law->numberOfParameter(); index++) {
+  for (int index = 0; index < m_distribution->numberOfParameter(); index++) {
     if (currentChar >= k_titleBufferSize) {
       break;
     }
     /* strlcpy returns the size of src, not the size copied, but it is not a
      * problem here. */
-    currentChar += strlcpy(m_titleBuffer+currentChar, I18n::translate(m_law->parameterNameAtIndex(index)), k_titleBufferSize - currentChar);
+    currentChar += strlcpy(m_titleBuffer+currentChar, I18n::translate(m_distribution->parameterNameAtIndex(index)), k_titleBufferSize - currentChar);
     if (currentChar >= k_titleBufferSize) {
       break;
     }
@@ -282,9 +283,10 @@ void CalculationController::updateTitle() {
     if (currentChar >= k_titleBufferSize) {
       break;
     }
-    constexpr size_t bufferSize = PrintFloat::bufferSizeForFloatsWithPrecision(Constant::ShortNumberOfSignificantDigits);
+    constexpr int precision = Preferences::ShortNumberOfSignificantDigits;
+    constexpr int bufferSize = PrintFloat::charSizeForFloatsWithPrecision(precision);
     char buffer[bufferSize];
-    PrintFloat::convertFloatToText<double>(m_law->parameterValueAtIndex(index), buffer, bufferSize, Constant::ShortNumberOfSignificantDigits, Preferences::PrintFloatMode::Decimal);
+    PoincareHelpers::ConvertFloatToTextWithDisplayMode<double>(m_distribution->parameterValueAtIndex(index), buffer, bufferSize, precision, Preferences::PrintFloatMode::Decimal);
     currentChar += strlcpy(m_titleBuffer+currentChar, buffer, k_titleBufferSize - currentChar);
     if (currentChar >= k_titleBufferSize) {
       break;

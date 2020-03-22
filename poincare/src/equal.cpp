@@ -18,9 +18,11 @@ extern "C" {
 #include <math.h>
 #include <limits.h>
 }
+#include <utility>
+
 namespace Poincare {
 
-Expression EqualNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
+Expression EqualNode::shallowReduce(ReductionContext reductionContext) {
   return Equal(this).shallowReduce();
 }
 
@@ -29,7 +31,7 @@ Layout EqualNode::createLayout(Preferences::PrintFloatMode floatDisplayMode, int
   result.addOrMergeChildAtIndex(childAtIndex(0)->createLayout(floatDisplayMode, numberOfSignificantDigits), 0, false);
   result.addChildAtIndex(CodePointLayout::Builder('='), result.numberOfChildren(), result.numberOfChildren(), nullptr);
   result.addOrMergeChildAtIndex(childAtIndex(1)->createLayout(floatDisplayMode, numberOfSignificantDigits), result.numberOfChildren(), false);
-  return result;
+  return std::move(result);
 }
 
 int EqualNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
@@ -37,14 +39,18 @@ int EqualNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloatM
 }
 
 template<typename T>
-Evaluation<T> EqualNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Evaluation<T> EqualNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   return Complex<T>::Undefined();
 }
 
 
-Expression Equal::standardEquation(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Expression Equal::standardEquation(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   Expression sub = Subtraction::Builder(childAtIndex(0).clone(), childAtIndex(1).clone());
-  return sub.reduce(context, complexFormat, angleUnit);
+  /* When reducing the equation, we specify the reduction target to be
+   * SystemForAnalysis. This enables to expand Newton multinom to be able to
+   * detect polynom correctly ("(x+2)^2" in this form won't be detected
+   * unless expanded). */
+  return sub.reduce(ExpressionNode::ReductionContext(context, complexFormat, angleUnit, ExpressionNode::ReductionTarget::SystemForAnalysis));
 }
 
 Expression Equal::shallowReduce() {

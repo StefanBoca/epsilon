@@ -1,14 +1,14 @@
 #ifndef SEQUENCE_SEQUENCE_CONTEXT_H
 #define SEQUENCE_SEQUENCE_CONTEXT_H
 
-#include <poincare/context.h>
+#include <poincare/context_with_parent.h>
 #include <poincare/expression.h>
 #include <poincare/symbol.h>
 
 namespace Sequence {
 
 constexpr static int MaxRecurrenceDepth = 2;
-static constexpr int MaxNumberOfSequences = 2;
+static constexpr int MaxNumberOfSequences = 3;
 
 class SequenceStore;
 class SequenceContext;
@@ -33,24 +33,17 @@ private:
   T m_values[MaxNumberOfSequences][MaxRecurrenceDepth+1];
 };
 
-class SequenceContext : public Poincare::Context {
+class SequenceContext : public Poincare::ContextWithParent {
 public:
   SequenceContext(Poincare::Context * parentContext, SequenceStore * sequenceStore) :
-    Context(),
+    ContextWithParent(parentContext),
     m_floatSequenceContext(),
     m_doubleSequenceContext(),
-    m_sequenceStore(sequenceStore),
-    m_parentContext(parentContext) {}
-  /* expressionForSymbol & setExpressionForSymbolName directly call the parent
+    m_sequenceStore(sequenceStore) {}
+  /* expressionForSymbolAbstract & setExpressionForSymbolAbstractName directly call the parent
    * context respective methods. Indeed, special chars like n, u(n), u(n+1),
    * v(n), v(n+1) are taken into accound only when evaluating sequences which
    * is done in another context. */
-  const Poincare::Expression expressionForSymbol(const Poincare::SymbolAbstract & symbol, bool clone) override {
-    return m_parentContext->expressionForSymbol(symbol, clone);
-  }
-  void setExpressionForSymbol(const Poincare::Expression & expression, const Poincare::SymbolAbstract & symbol, Poincare::Context & context) override {
-    m_parentContext->setExpressionForSymbol(expression, symbol, context);
-  }
   template<typename T> T valueOfSequenceAtPreviousRank(int sequenceIndex, int rank) const {
     if (sizeof(T) == sizeof(float)) {
       return m_floatSequenceContext.valueOfSequenceAtPreviousRank(sequenceIndex, rank);
@@ -71,7 +64,6 @@ private:
   TemplatedSequenceContext<float> m_floatSequenceContext;
   TemplatedSequenceContext<double> m_doubleSequenceContext;
   SequenceStore * m_sequenceStore;
-  Poincare::Context * m_parentContext;
 };
 
 }

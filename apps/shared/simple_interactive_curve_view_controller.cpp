@@ -29,11 +29,6 @@ bool SimpleInteractiveCurveViewController::handleEvent(Ion::Events::Event event)
   return false;
 }
 
-bool SimpleInteractiveCurveViewController::textFieldDidAbortEditing(TextField * textField) {
-  reloadBannerView();
-  return true;
-}
-
 bool SimpleInteractiveCurveViewController::textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) {
   if ((event == Ion::Events::OK || event == Ion::Events::EXE) && !textField->isEditing()) {
     return handleEnter();
@@ -50,7 +45,7 @@ bool SimpleInteractiveCurveViewController::handleZoom(Ion::Events::Event event) 
 
 bool SimpleInteractiveCurveViewController::handleLeftRightEvent(Ion::Events::Event event) {
   int direction = event == Ion::Events::Left ? -1 : 1;
-  if (moveCursorHorizontally(direction)) {
+  if (moveCursorHorizontally(direction, Ion::Events::isLongRepetition())) {
     interactiveCurveViewRange()->panToMakePointVisible(
       m_cursor->x(), m_cursor->y(),
       cursorTopMarginRatio(), k_cursorRightMarginRatio, cursorBottomMarginRatio(), k_cursorLeftMarginRatio

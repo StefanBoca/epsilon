@@ -7,6 +7,8 @@
 
 namespace Poincare {
 
+static inline int minInt(int x, int y) { return x < y ? x : y; }
+
 // MatrixLayoutNode
 
 void MatrixLayoutNode::addGreySquares() {
@@ -26,7 +28,7 @@ void MatrixLayoutNode::removeGreySquares() {
 
 // LayoutNode
 
-void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   int childIndex = indexOfChild(cursor->layoutNode());
   if (childIndex >= 0
       && cursor->position() == LayoutCursor::Position::Left
@@ -52,10 +54,10 @@ void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomp
     cursor->setLayoutNode(lastChild);
     return;
   }
-  GridLayoutNode::moveCursorLeft(cursor, shouldRecomputeLayout);
+  GridLayoutNode::moveCursorLeft(cursor, shouldRecomputeLayout, forSelection);
 }
 
-void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == this
       && cursor->position() == LayoutCursor::Position::Left)
   {
@@ -81,13 +83,33 @@ void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecom
     return;
 
   }
-  GridLayoutNode::moveCursorRight(cursor, shouldRecomputeLayout);
+  GridLayoutNode::moveCursorRight(cursor, shouldRecomputeLayout, forSelection);
 }
 
 void MatrixLayoutNode::willAddSiblingToEmptyChildAtIndex(int childIndex) {
   if (childIsRightOfGrid(childIndex) || childIsBottomOfGrid(childIndex)) {
      newRowOrColumnAtIndex(childIndex);
   }
+}
+
+void MatrixLayoutNode::deleteBeforeCursor(LayoutCursor * cursor) {
+  // Deleting the left empty layout of an empty row deletes the row
+  assert(cursor != nullptr);
+  LayoutNode * pointedChild = cursor->layoutNode();
+  if (pointedChild->isEmpty()) {
+    int indexOfPointedLayout = indexOfChild(pointedChild);
+    if (columnAtChildIndex(indexOfPointedLayout) == 0) {
+      int rowIndex = rowAtChildIndex(indexOfPointedLayout);
+      if (rowIndex < m_numberOfRows - 1 && isRowEmpty(rowIndex) && m_numberOfRows > 2) {
+        deleteRowAtIndex(rowIndex);
+        assert(indexOfPointedLayout >= 0 && indexOfPointedLayout < m_numberOfColumns*m_numberOfRows);
+        cursor->setLayoutNode(childAtIndex(indexOfPointedLayout));
+        cursor->setPosition(LayoutCursor::Position::Right);
+        return;
+      }
+    }
+  }
+  GridLayoutNode::deleteBeforeCursor(cursor);
 }
 
 // SerializableNode
@@ -98,15 +120,38 @@ int MatrixLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Prin
   }
   buffer[bufferSize-1] = 0;
   if (bufferSize == 1) {
-    return 1;
+    return 0;
   }
-  int numberOfChar = 0;
-  numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, '[');
+
+  // Write the opening bracket
+  int numberOfChar = SerializationHelper::CodePoint(buffer, bufferSize, '[');
   if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
 
-  int maxRowIndex = hasGreySquares() ? m_numberOfRows - 1 : m_numberOfRows;
+  /* Do not serialize the outmost lines if they are empty: compute the first and
+   * last lines to serialize. */
+  int minRowIndex = 0;
+  bool matrixIsEmpty = true;
+  for (int i = 0; i < m_numberOfRows; i++) {
+    if (!isRowEmpty(i)) {
+      minRowIndex = i;
+      matrixIsEmpty = false;
+      break;
+    }
+  }
+  assert(m_numberOfRows > 0);
+  int maxRowIndex = m_numberOfRows - 1;
+  if (!matrixIsEmpty) {
+    for (int i = m_numberOfRows - 1; i >= 0; i--) {
+      if (!isRowEmpty(i)) {
+        maxRowIndex = i;
+        break;
+      }
+    }
+  }
+
+  // Serialize the vectors
   int maxColumnIndex = hasGreySquares() ? m_numberOfColumns - 2 :  m_numberOfColumns - 1;
-  for (int i = 0; i < maxRowIndex; i++) {
+  for (int i = minRowIndex; i <= maxRowIndex; i++) {
     numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, '[');
     if (numberOfChar >= bufferSize-1) { return bufferSize-1;}
 
@@ -116,10 +161,10 @@ int MatrixLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Prin
     numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, ']');
     if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
   }
+
+  // Write the final closing bracket
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, ']');
-  if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
-  buffer[numberOfChar] = 0;
-  return numberOfChar;
+  return minInt(numberOfChar, bufferSize-1);
 }
 
 // Protected
@@ -137,7 +182,7 @@ KDPoint MatrixLayoutNode::positionOfChild(LayoutNode * l) {
   return GridLayoutNode::positionOfChild(l).translatedBy(KDPoint(KDPoint(SquareBracketLayoutNode::BracketWidth(), SquareBracketLayoutNode::k_lineThickness)));
 }
 
-void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   MatrixLayout thisRef = MatrixLayout(this);
   bool shouldRemoveGreySquares = false;
   int firstIndex = direction == VerticalDirection::Up ? 0 : numberOfChildren() - m_numberOfColumns;
@@ -147,14 +192,14 @@ void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutC
     if (i >= lastIndex) {
       break;
     }
-    if (cursor->layoutReference().node()->hasAncestor(l, true)) {
+    if (cursor->layout().node()->hasAncestor(l, true)) {
       // The cursor is leaving the matrix, so remove the grey squares.
       shouldRemoveGreySquares = true;
       break;
     }
     i++;
   }
-  GridLayoutNode::moveCursorVertically(direction, cursor, shouldRecomputeLayout, equivalentPositionVisited);
+  GridLayoutNode::moveCursorVertically(direction, cursor, shouldRecomputeLayout, equivalentPositionVisited, forSelection);
   if (cursor->isDefined() && shouldRemoveGreySquares) {
     assert(thisRef.hasGreySquares());
     thisRef.removeGreySquares();
@@ -263,7 +308,7 @@ bool MatrixLayoutNode::hasGreySquares() const {
   return false;
 }
 
-void MatrixLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void MatrixLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   BracketPairLayoutNode::RenderWithChildSize(gridSize(), ctx, p, expressionColor, backgroundColor);
 }
 
@@ -271,23 +316,12 @@ void MatrixLayoutNode::didReplaceChildAtIndex(int index, LayoutCursor * cursor, 
   assert(index >= 0 && index < m_numberOfColumns*m_numberOfRows);
   int rowIndex = rowAtChildIndex(index);
   int columnIndex = columnAtChildIndex(index);
-  bool rowIsEmpty = isRowEmpty(rowIndex);
   bool columnIsEmpty = isColumnEmpty(columnIndex);
   int newIndex = index;
-  if (rowIsEmpty && m_numberOfRows > 2) {
-    deleteRowAtIndex(rowIndex);
-  }
   if (columnIsEmpty && m_numberOfColumns > 2) {
+    // If the column is now empty, delete it
     deleteColumnAtIndex(columnIndex);
     newIndex -= rowIndex;
-  }
-  if (!rowIsEmpty && !columnIsEmpty) {
-    LayoutNode * newChild = childAtIndex(newIndex);
-    if (newChild->isEmpty()
-        && (childIsRightOfGrid(index)|| childIsBottomOfGrid(index)))
-    {
-      static_cast<EmptyLayoutNode *>(newChild)->setColor(EmptyLayoutNode::Color::Grey);
-    }
   }
   if (cursor) {
     assert(newIndex >= 0 && newIndex < m_numberOfColumns*m_numberOfRows);

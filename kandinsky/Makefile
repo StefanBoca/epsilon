@@ -1,8 +1,7 @@
 SFLAGS += -Ikandinsky/include
 
-src += $(addprefix kandinsky/src/,\
+kandinsky_src += $(addprefix kandinsky/src/,\
   color.cpp \
-  context.cpp \
   context_line.cpp \
   context_pixel.cpp \
   context_rect.cpp \
@@ -15,12 +14,12 @@ src += $(addprefix kandinsky/src/,\
   rect.cpp \
 )
 
-src += $(addprefix kandinsky/fonts/, \
+kandinsky_src += $(addprefix kandinsky/fonts/, \
   LargeFont.ttf \
   SmallFont.ttf \
 )
 
-tests += $(addprefix kandinsky/test/,\
+tests_src += $(addprefix kandinsky/test/,\
   color.cpp\
   font.cpp\
   rect.cpp\

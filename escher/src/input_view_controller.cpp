@@ -5,9 +5,8 @@
 
 InputViewController::ExpressionFieldController::ExpressionFieldController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * textFieldDelegate, LayoutFieldDelegate * layoutFieldDelegate) :
   ViewController(parentResponder),
-  m_expressionField(this, m_textBuffer, k_bufferLength, inputEventHandlerDelegate, textFieldDelegate, layoutFieldDelegate)
+  m_expressionField(this, inputEventHandlerDelegate, textFieldDelegate, layoutFieldDelegate)
 {
-  m_textBuffer[0] = 0;
 }
 
 void InputViewController::ExpressionFieldController::didBecomeFirstResponder() {
@@ -21,23 +20,19 @@ InputViewController::InputViewController(Responder * parentResponder, ViewContro
   m_failureAction(Invocation(nullptr, nullptr)),
   m_inputEventHandlerDelegate(inputEventHandlerDelegate),
   m_textFieldDelegate(textFieldDelegate),
-  m_layoutFieldDelegate(layoutFieldDelegate),
-  m_inputViewHeightIsMaximal(false)
+  m_layoutFieldDelegate(layoutFieldDelegate)
 {
 }
 
-const char * InputViewController::textBody() {
-  return m_expressionFieldController.expressionField()->text();
-}
-
-void InputViewController::edit(Responder * caller, Ion::Events::Event event, void * context, const char * initialText, Invocation::Action successAction, Invocation::Action failureAction) {
+void InputViewController::edit(Responder * caller, Ion::Events::Event event, void * context, Invocation::Action successAction, Invocation::Action failureAction) {
   m_successAction = Invocation(successAction, context);
   m_failureAction = Invocation(failureAction, context);
   displayModalViewController(&m_expressionFieldController, 1.0f, 1.0f);
-  if (initialText != nullptr) {
-    m_expressionFieldController.expressionField()->setText(initialText);
-  }
   m_expressionFieldController.expressionField()->handleEvent(event);
+}
+
+bool InputViewController::isEditing() {
+  return m_expressionFieldController.expressionField()->isEditing();
 }
 
 void InputViewController::abortEditionAndDismiss() {
@@ -90,12 +85,17 @@ bool InputViewController::layoutFieldDidAbortEditing(LayoutField * layoutField) 
 }
 
 void InputViewController::layoutFieldDidChangeSize(LayoutField * layoutField) {
-  /* Reload the view only if the ExpressionField height actually changes, i.e.
-   * not if the height is already maximal and stays maximal. */
-  bool newInputViewHeightIsMaximal = m_expressionFieldController.expressionField()->heightIsMaximal();
-  if (!m_inputViewHeightIsMaximal || !newInputViewHeightIsMaximal) {
-    m_inputViewHeightIsMaximal = newInputViewHeightIsMaximal;
+  if (m_expressionFieldController.expressionField()->inputViewHeightDidChange()) {
+    /* Reload the whole view only if the ExpressionField's height did actually
+     * change. */
     reloadModalViewController();
+  } else {
+    /* The input view is already at maximal size so we do not need to relayout
+     * the view underneath, but the view inside the input view might still need
+     * to be relayouted.
+     * We force the relayout because the frame stays the same but we need to
+     * propagate a relayout to the content of the field scroll view. */
+    m_expressionFieldController.expressionField()->layoutSubviews(true);
   }
 }
 

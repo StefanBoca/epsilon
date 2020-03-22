@@ -17,7 +17,6 @@ public:
   SimpleInteractiveCurveViewController(Responder * parentResponder, CurveViewCursor * cursor);
   View * view() override;
   bool handleEvent(Ion::Events::Event event) override;
-  bool textFieldDidAbortEditing(TextField * textField) override;
   bool textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) override;
 protected:
   constexpr static float k_cursorRightMarginRatio = 0.04f; // (cursorWidth/2)/(graphViewWidth-1)
@@ -31,7 +30,7 @@ protected:
   /* the result of moveCursorVertically/Horizontally means:
    * false -> the cursor cannot move in this direction
    * true -> the cursor moved */
-  virtual bool moveCursorHorizontally(int direction) { return false; };
+  virtual bool moveCursorHorizontally(int direction, bool fast = false) { return false; }
   virtual InteractiveCurveViewRange * interactiveCurveViewRange() = 0;
   virtual CurveView * curveView() = 0;
   virtual bool handleEnter() = 0;

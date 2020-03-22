@@ -12,18 +12,16 @@ void TabTableController::didBecomeFirstResponder() {
 }
 
 void TabTableController::viewWillAppear() {
+  ViewController::viewWillAppear();
   selectableTableView()->reloadData();
 }
 
 void TabTableController::willExitResponderChain(Responder * nextFirstResponder) {
   if (nextFirstResponder == tabController()) {
+    assert(tabController() != nullptr);
     selectableTableView()->deselectTable();
     selectableTableView()->scrollToCell(0,0);
   }
-}
-
-SelectableTableView * TabTableController::selectableTableView() {
-  return static_cast<SelectableTableView *>(view());
 }
 
 }

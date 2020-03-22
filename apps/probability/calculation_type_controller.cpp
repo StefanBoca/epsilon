@@ -12,10 +12,10 @@
 
 namespace Probability {
 
-CalculationTypeController::CalculationTypeController(Responder * parentResponder, Law * law, Calculation * calculation, CalculationController * calculationController) :
+CalculationTypeController::CalculationTypeController(Responder * parentResponder, Distribution * distribution, Calculation * calculation, CalculationController * calculationController) :
   ViewController(parentResponder),
   m_selectableTableView(this),
-  m_law(law),
+  m_distribution(distribution),
   m_calculation(calculation),
   m_calculationController(calculationController)
 {
@@ -59,8 +59,8 @@ bool CalculationTypeController::handleEvent(Ion::Events::Event event) {
   return false;
 }
 
-int CalculationTypeController::numberOfRows() {
-  if (m_law->isContinuous()) {
+int CalculationTypeController::numberOfRows() const {
+  if (m_distribution->isContinuous()) {
     return k_numberOfImages-1;
   }
   return k_numberOfImages;
@@ -80,7 +80,7 @@ HighlightCell * CalculationTypeController::reusableCell(int index) {
   return &m_imageCells[index];
 }
 
-int CalculationTypeController::reusableCellCount() {
+int CalculationTypeController::reusableCellCount() const {
   return k_numberOfImages;
 }
 

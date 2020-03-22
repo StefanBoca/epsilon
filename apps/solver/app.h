@@ -32,11 +32,18 @@ public:
   static App * app() {
     return static_cast<App *>(Container::activeApp());
   }
+  Snapshot * snapshot() {
+    return static_cast<Snapshot *>(::App::snapshot());
+  }
+  EquationStore * equationStore() {
+    return snapshot()->equationStore();
+  }
   InputViewController * inputViewController() { return &m_inputViewController; }
   ViewController * solutionsControllerStack() { return &m_alternateEmptyViewController; }
   ViewController * intervalController() { return &m_intervalController; }
+  SolutionsController * solutionsController() { return &m_solutionsController; }
   void willBecomeInactive() override;
-  char XNT() override;
+  TELEMETRY_ID("Solver");
 private:
   App(Snapshot * snapshot);
   SolutionsController m_solutionsController;

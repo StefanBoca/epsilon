@@ -14,9 +14,9 @@ namespace Sequence {
 TypeParameterController::TypeParameterController(Responder * parentResponder, ListController * list, TableCell::Layout cellLayout,
   KDCoordinate topMargin, KDCoordinate rightMargin, KDCoordinate bottomMargin, KDCoordinate leftMargin) :
   ViewController(parentResponder),
-  m_expliciteCell(I18n::Message::Explicit, cellLayout),
-  m_singleRecurrenceCell(I18n::Message::SingleRecurrence, cellLayout),
-  m_doubleRecurenceCell(I18n::Message::DoubleRecurrence, cellLayout),
+  m_explicitCell(&m_selectableTableView, I18n::Message::Explicit, cellLayout),
+  m_singleRecurrenceCell(&m_selectableTableView, I18n::Message::SingleRecurrence, cellLayout),
+  m_doubleRecurenceCell(&m_selectableTableView, I18n::Message::DoubleRecurrence, cellLayout),
   m_layouts{},
   m_selectableTableView(this),
   m_record(),
@@ -92,18 +92,18 @@ bool TypeParameterController::handleEvent(Ion::Events::Event event) {
   return false;
 }
 
-int TypeParameterController::numberOfRows() {
+int TypeParameterController::numberOfRows() const {
   return k_totalNumberOfCell;
 };
 
 HighlightCell * TypeParameterController::reusableCell(int index) {
   assert(index >= 0);
   assert(index < k_totalNumberOfCell);
-  HighlightCell * cells[] = {&m_expliciteCell, &m_singleRecurrenceCell, &m_doubleRecurenceCell};
+  HighlightCell * cells[] = {&m_explicitCell, &m_singleRecurrenceCell, &m_doubleRecurenceCell};
   return cells[index];
 }
 
-int TypeParameterController::reusableCellCount() {
+int TypeParameterController::reusableCellCount() const {
   return k_totalNumberOfCell;
 }
 

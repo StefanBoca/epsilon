@@ -2,7 +2,6 @@
 #define REGRESSION_EVEN_ODD_DOUBLE_BUFFER_TEXT_CELL_WITH_SEPARATOR_H
 
 #include <escher.h>
-#include "even_odd_buffer_text_cell_with_margin.h"
 
 namespace Regression {
 
@@ -26,12 +25,12 @@ public:
   void drawRect(KDContext * ctx, KDRect rect) const override;
   int numberOfSubviews() const override;
   View * subviewAtIndex(int index) override;
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
   bool handleEvent(Ion::Events::Event event) override;
 protected:
   bool m_firstTextSelected;
-  EvenOddBufferTextCellWithMargin m_firstBufferTextView;
-  EvenOddBufferTextCellWithMargin m_secondBufferTextView;
+  EvenOddBufferTextCell m_firstBufferTextView;
+  EvenOddBufferTextCell m_secondBufferTextView;
 };
 
 }

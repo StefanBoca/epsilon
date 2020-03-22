@@ -1,6 +1,7 @@
 #include "list_controller.h"
 #include "app.h"
 #include <poincare/code_point_layout.h>
+#include <poincare/variable_context.h>
 #include <assert.h>
 
 using namespace Shared;
@@ -10,7 +11,6 @@ namespace Solver {
 ListController::ListController(Responder * parentResponder, EquationStore * equationStore, ButtonRowController * footer) :
   ExpressionModelListController(parentResponder, I18n::Message::AddEquation),
   ButtonRowDelegate(nullptr, footer),
-  m_equationStore(equationStore),
   m_equationListView(this),
   m_expressionCells{},
   m_resolveButton(this, equationStore->numberOfDefinedModels() > 1 ? I18n::Message::ResolveSystem : I18n::Message::ResolveEquation, Invocation([](void * context, void * sender) {
@@ -43,10 +43,7 @@ Button * ListController::buttonAtIndex(int index, ButtonRowController::Position 
 }
 
 int ListController::typeAtLocation(int i, int j) {
-  if (j == m_equationStore->numberOfModels()) {
-    return 1;
-  }
-  return 0;
+  return isAddEmptyRow(j);
 }
 
 HighlightCell * ListController::reusableCell(int index, int type) {
@@ -71,7 +68,7 @@ int ListController::reusableCellCount(int type) {
 }
 
 void ListController::willDisplayCellForIndex(HighlightCell * cell, int index) {
-  if (index != m_equationStore->numberOfModels()) {
+  if (!isAddEmptyRow(index)) {
     willDisplayExpressionCellAtIndex(cell, index);
   }
   cell->setHighlighted(index == selectedRow());
@@ -128,10 +125,11 @@ bool layoutRepresentsAnEquality(Poincare::Layout l) {
 
 bool ListController::textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) {
   if (textField->isEditing() && textField->shouldFinishEditing(event)) {
-    if (!textRepresentsAnEquality(textField->text())) {
-      textField->handleEvent(Ion::Events::ShiftRight);
+    const char * text = textField->text();
+    if (!textRepresentsAnEquality(text)) {
+      textField->setCursorLocation(text + strlen(text));
       textField->handleEventWithText("=0");
-      if (!textRepresentsAnEquality(textField->text())) {
+      if (!textRepresentsAnEquality(text)) {
         Container::activeApp()->displayWarning(I18n::Message::RequireEquation);
         return true;
       }
@@ -146,7 +144,7 @@ bool ListController::textFieldDidReceiveEvent(TextField * textField, Ion::Events
 bool ListController::layoutFieldDidReceiveEvent(LayoutField * layoutField, Ion::Events::Event event) {
   if (layoutField->isEditing() && layoutField->shouldFinishEditing(event)) {
     if (!layoutRepresentsAnEquality(layoutField->layout())) {
-      layoutField->handleEvent(Ion::Events::ShiftRight);
+      layoutField->putCursorRightOfLayout();
       layoutField->handleEventWithText("=0");
       if (!layoutRepresentsAnEquality(layoutField->layout())) {
         Container::activeApp()->displayWarning(I18n::Message::RequireEquation);
@@ -171,11 +169,12 @@ bool ListController::layoutFieldDidFinishEditing(LayoutField * layoutField, Poin
 }
 
 void ListController::resolveEquations() {
-  if (m_equationStore->numberOfDefinedModels() == 0) {
+  if (modelStore()->numberOfDefinedModels() == 0) {
     Container::activeApp()->displayWarning(I18n::Message::EnterEquation);
     return;
   }
-  EquationStore::Error e = m_equationStore->exactSolve(textFieldDelegateApp()->localContext());
+  bool resultWithoutUserDefinedSymbols = false;
+  EquationStore::Error e = modelStore()->exactSolve(textFieldDelegateApp()->localContext(), &resultWithoutUserDefinedSymbols);
   switch (e) {
     case EquationStore::Error::EquationUndefined:
       Container::activeApp()->displayWarning(I18n::Message::UndefinedEquation);
@@ -191,21 +190,22 @@ void ListController::resolveEquations() {
       return;
     case EquationStore::Error::RequireApproximateSolution:
     {
-      StackViewController * stack = stackController();
-      stack->push(App::app()->intervalController(), KDColorWhite, Palette::PurpleBright, Palette::PurpleBright);
+      App::app()->solutionsController()->setShouldReplaceFuncionsButNotSymbols(resultWithoutUserDefinedSymbols);
+      stackController()->push(App::app()->intervalController(), KDColorWhite, Palette::PurpleBright, Palette::PurpleBright);
       return;
     }
     default:
     {
       assert(e == EquationStore::Error::NoError);
       StackViewController * stack = stackController();
+      App::app()->solutionsController()->setShouldReplaceFuncionsButNotSymbols(resultWithoutUserDefinedSymbols);
       stack->push(App::app()->solutionsControllerStack(), KDColorWhite, Palette::PurpleBright, Palette::PurpleBright);
     }
- }
+  }
 }
 
 void ListController::reloadButtonMessage() {
-  footer()->setMessageOfButtonAtIndex(m_equationStore->numberOfDefinedModels() > 1 ? I18n::Message::ResolveSystem : I18n::Message::ResolveEquation, 0);
+  footer()->setMessageOfButtonAtIndex(modelStore()->numberOfDefinedModels() > 1 ? I18n::Message::ResolveSystem : I18n::Message::ResolveEquation, 0);
 }
 
 void ListController::addEmptyModel() {
@@ -220,8 +220,12 @@ bool ListController::removeModelRow(Ion::Storage::Record record) {
 }
 
 void ListController::reloadBrace() {
-  EquationListView::BraceStyle braceStyle = m_equationStore->numberOfModels() <= 1 ? EquationListView::BraceStyle::None : (m_equationStore->numberOfModels() == m_equationStore->maxNumberOfModels() ? EquationListView::BraceStyle::Full : EquationListView::BraceStyle::OneRowShort);
+  EquationListView::BraceStyle braceStyle = modelStore()->numberOfModels() <= 1 ? EquationListView::BraceStyle::None : (modelStore()->numberOfModels() == modelStore()->maxNumberOfModels() ? EquationListView::BraceStyle::Full : EquationListView::BraceStyle::OneRowShort);
   m_equationListView.setBraceStyle(braceStyle);
+}
+
+EquationStore * ListController::modelStore() {
+  return App::app()->equationStore();
 }
 
 SelectableTableView * ListController::selectableTableView() {

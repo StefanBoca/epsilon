@@ -20,12 +20,17 @@ extern "C" {
 
 class Window;
 
+namespace Shared {
+  class RoundCursorView;
+}
+
 class View {
   // We only want Window to be able to invoke View::redraw
   friend class Window;
   friend class TransparentView;
+  friend class Shared::RoundCursorView;
 public:
-  View();
+  View() : m_frame(KDRectZero), m_superview(nullptr), m_dirtyRect(KDRectZero) {}
   virtual ~View() {
     for (int i = 0; i < numberOfSubviews(); i++) {
       View * subview = subviewAtIndex(i);
@@ -44,16 +49,18 @@ public:
   /* The drawRect method should be implemented by each View subclass. In a
    * typical drawRect implementation, a subclass will make drawing calls to the
    * Kandinsky library using the provided context. */
-  virtual void drawRect(KDContext * ctx, KDRect rect) const;
+  virtual void drawRect(KDContext * ctx, KDRect rect) const {
+    // By default, a view doesn't do anything, it's transparent
+  }
 
   void setSize(KDSize size);
-  void setFrame(KDRect frame);
+  void setFrame(KDRect frame, bool force);
   KDPoint pointFromPointInView(View * view, KDPoint point);
 
   KDRect bounds() const;
   View * subview(int index);
 
-  virtual KDSize minimalSizeForOptimalDisplay() const;
+  virtual KDSize minimalSizeForOptimalDisplay() const { return KDSizeZero; }
 
 #if ESCHER_VIEW_LOGGING
   friend std::ostream &operator<<(std::ostream &os, View &view);
@@ -75,13 +82,9 @@ protected:
 #endif
   KDRect m_frame;
 private:
-  virtual int numberOfSubviews() const {
-    return 0;
-  }
-  virtual View * subviewAtIndex(int index) {
-    return nullptr;
-  }
-  virtual void layoutSubviews();
+  virtual int numberOfSubviews() const { return 0; }
+  virtual View * subviewAtIndex(int index) { return nullptr; }
+  virtual void layoutSubviews(bool force = false) {}
   virtual const Window * window() const;
   KDRect redraw(KDRect rect, KDRect forceRedrawRect = KDRectZero);
   KDPoint absoluteOrigin() const;

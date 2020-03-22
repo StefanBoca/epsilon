@@ -1,21 +1,20 @@
 #include "variable_box_controller.h"
 #include "shared/global_context.h"
-#include "shared/poincare_helpers.h"
-#include "shared/function.h"
-#include "shared/cartesian_function.h"
-#include "graph/cartesian_function_store.h"
-#include "constant.h"
+#include "shared/continuous_function.h"
 #include <escher/metric.h>
-#include <assert.h>
-#include <poincare/matrix_layout.h>
-#include <poincare/layout_helper.h>
 #include <ion/unicode/utf8_decoder.h>
+#include <poincare/exception_checkpoint.h>
+#include <poincare/layout_helper.h>
+#include <poincare/matrix_layout.h>
+#include <poincare/preferences.h>
+#include <assert.h>
 
 using namespace Poincare;
 using namespace Shared;
 using namespace Ion;
 
 static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
+static inline KDCoordinate maxInt(int x, int y) { return x > y ? x : y; }
 
 VariableBoxController::VariableBoxController() :
   NestedMenuController(nullptr, I18n::Message::Variables),
@@ -23,6 +22,9 @@ VariableBoxController::VariableBoxController() :
   m_lockPageDelete(Page::RootMenu),
   m_firstMemoizedLayoutIndex(0)
 {
+  for (int i = 0; i < k_maxNumberOfDisplayedRows; i++) {
+    m_leafCells[i].setParentResponder(&m_selectableTableView);
+  }
 }
 
 void VariableBoxController::viewWillAppear() {
@@ -72,7 +74,7 @@ bool VariableBoxController::handleEvent(Ion::Events::Event event) {
   return NestedMenuController::handleEvent(event);
 }
 
-int VariableBoxController::numberOfRows() {
+int VariableBoxController::numberOfRows() const {
   switch (m_currentPage) {
     case Page::RootMenu:
       return k_numberOfMenuRows;
@@ -103,22 +105,23 @@ void VariableBoxController::willDisplayCellForIndex(HighlightCell * cell, int in
   }
   ExpressionTableCellWithExpression * myCell = (ExpressionTableCellWithExpression *)cell;
   Storage::Record record = recordAtIndex(index);
-  assert(Shared::Function::k_maxNameWithArgumentSize > SymbolAbstract::k_maxNameSize);
   char symbolName[Shared::Function::k_maxNameWithArgumentSize];
   size_t symbolLength = 0;
   if (m_currentPage == Page::Expression) {
+    static_assert(Shared::Function::k_maxNameWithArgumentSize > Poincare::SymbolAbstract::k_maxNameSize, "Forgot argument's size?");
     symbolLength = SymbolAbstract::TruncateExtension(symbolName, record.fullName(), SymbolAbstract::k_maxNameSize);
   } else {
     assert(m_currentPage == Page::Function);
-    CartesianFunction f(record);
+    ContinuousFunction f(record);
     symbolLength = f.nameWithArgument(
         symbolName,
-        Shared::Function::k_maxNameWithArgumentSize,
-        Shared::CartesianFunction::Symbol());
+        Shared::Function::k_maxNameWithArgumentSize
+    );
   }
   Layout symbolLayout = LayoutHelper::String(symbolName, symbolLength);
   myCell->setLayout(symbolLayout);
   myCell->setAccessoryLayout(expressionLayoutForRecord(record, index));
+  myCell->reloadScroll();
   myCell->reloadCell();
 }
 
@@ -191,8 +194,6 @@ bool VariableBoxController::selectLeaf(int selectedRow) {
 
   // Get the name text to insert
   Storage::Record record = recordAtIndex(selectedRow);
-  assert(Shared::Function::k_maxNameWithArgumentSize > 0);
-  assert(Shared::Function::k_maxNameWithArgumentSize > SymbolAbstract::k_maxNameSize);
   constexpr size_t nameToHandleMaxSize = Shared::Function::k_maxNameWithArgumentSize;
   char nameToHandle[nameToHandleMaxSize];
   size_t nameLength = SymbolAbstract::TruncateExtension(nameToHandle, record.fullName(), nameToHandleMaxSize);
@@ -236,7 +237,17 @@ Layout VariableBoxController::expressionLayoutForRecord(Storage::Record record, 
   }
   assert(index >= m_firstMemoizedLayoutIndex && index < m_firstMemoizedLayoutIndex + k_maxNumberOfDisplayedRows);
   if (m_layouts[index-m_firstMemoizedLayoutIndex].isUninitialized()) {
-    m_layouts[index-m_firstMemoizedLayoutIndex] = GlobalContext::ExpressionFromRecord(record).createLayout(Poincare::Preferences::sharedPreferences()->displayMode(), Constant::ShortNumberOfSignificantDigits);
+    /* Creating the layout of a very long variable might throw a pool exception.
+     * We want to catch it and return a dummy layout instead, otherwise the user
+     * won't be able to open the variable box again, until she deletes the
+     * problematic variable -> and she has no help to remember its name, as she
+     * can't open the variable box. */
+    Layout result;
+    Poincare::ExceptionCheckpoint ecp;
+    if (ExceptionRun(ecp)) {
+      result = GlobalContext::LayoutForRecord(record);
+    }
+    m_layouts[index-m_firstMemoizedLayoutIndex] = result;
   }
   return m_layouts[index-m_firstMemoizedLayoutIndex];
 }
@@ -273,9 +284,12 @@ void VariableBoxController::resetMemoization() {
 void VariableBoxController::destroyRecordAtRowIndex(int rowIndex) {
   // Destroy the record
   recordAtIndex(rowIndex).destroy();
-  // Shift the memoization
-  assert(rowIndex >= m_firstMemoizedLayoutIndex && rowIndex < m_firstMemoizedLayoutIndex + k_maxNumberOfDisplayedRows);
-  for (int i = rowIndex - m_firstMemoizedLayoutIndex; i < k_maxNumberOfDisplayedRows - 1; i++) {
+  // Shift the memoization if needed
+  if (rowIndex >= m_firstMemoizedLayoutIndex + k_maxNumberOfDisplayedRows) {
+    // The deleted row is after the memoization
+    return;
+  }
+  for (int i = maxInt(0, rowIndex - m_firstMemoizedLayoutIndex); i < k_maxNumberOfDisplayedRows - 1; i++) {
     m_layouts[i] = m_layouts[i+1];
   }
   m_layouts[k_maxNumberOfDisplayedRows - 1] = Layout();

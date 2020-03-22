@@ -1,5 +1,6 @@
 #include "calculation_graph_controller.h"
 #include "../app.h"
+#include "../../apps_container.h"
 
 using namespace Shared;
 using namespace Poincare;
@@ -18,15 +19,17 @@ CalculationGraphController::CalculationGraphController(Responder * parentRespond
 }
 
 void CalculationGraphController::viewWillAppear() {
+  Shared::SimpleInteractiveCurveViewController::viewWillAppear();
   assert(!m_record.isNull());
-  Expression::Coordinate2D pointOfInterest = computeNewPointOfInteresetFromAbscissa(m_graphRange->xMin(), 1);
-  if (std::isnan(pointOfInterest.abscissa)) {
+  Coordinate2D<double> pointOfInterest = computeNewPointOfInterestFromAbscissa(m_graphRange->xMin(), 1);
+  if (std::isnan(pointOfInterest.x1())) {
     m_isActive = false;
     m_graphView->setCursorView(nullptr);
     m_graphView->setBannerView(&m_defaultBannerView);
   } else {
     m_isActive = true;
-    m_cursor->moveTo(pointOfInterest.abscissa, pointOfInterest.value);
+    assert(App::app()->functionStore()->modelForRecord(m_record)->plotType() == Shared::ContinuousFunction::PlotType::Cartesian);
+    m_cursor->moveTo(pointOfInterest.x1(), pointOfInterest.x1(), pointOfInterest.x2());
     m_graphRange->panToMakePointVisible(m_cursor->x(), m_cursor->y(), cursorTopMarginRatio(), k_cursorRightMarginRatio, cursorBottomMarginRatio(), k_cursorLeftMarginRatio);
     m_bannerView->setNumberOfSubviews(Shared::XYBannerView::k_numberOfSubviews);
     reloadBannerView();
@@ -41,25 +44,18 @@ void CalculationGraphController::setRecord(Ion::Storage::Record record) {
 }
 
 void CalculationGraphController::reloadBannerView() {
-  reloadBannerViewForCursorOnFunction(m_cursor, m_record, functionStore(), CartesianFunction::Symbol());
+  reloadBannerViewForCursorOnFunction(m_cursor, m_record, functionStore(), AppsContainer::sharedAppsContainer()->globalContext());
 }
 
-Expression::Coordinate2D CalculationGraphController::computeNewPointOfInteresetFromAbscissa(double start, int direction) {
+Coordinate2D<double> CalculationGraphController::computeNewPointOfInterestFromAbscissa(double start, int direction) {
   double step = m_graphRange->xGridUnit()/10.0;
   step = direction < 0 ? -step : step;
   double max = direction > 0 ? m_graphRange->xMax() : m_graphRange->xMin();
   return computeNewPointOfInterest(start, step, max, textFieldDelegateApp()->localContext());
 }
 
-CartesianFunctionStore * CalculationGraphController::functionStore() const {
+ContinuousFunctionStore * CalculationGraphController::functionStore() const {
   return App::app()->functionStore();
-}
-
-bool CalculationGraphController::handleLeftRightEvent(Ion::Events::Event event) {
-  if (!m_isActive) {
-    return false;
-  }
-  return SimpleInteractiveCurveViewController::handleLeftRightEvent(event);
 }
 
 bool CalculationGraphController::handleEnter() {
@@ -68,12 +64,16 @@ bool CalculationGraphController::handleEnter() {
   return true;
 }
 
-bool CalculationGraphController::moveCursorHorizontally(int direction) {
-  Expression::Coordinate2D newPointOfInterest = computeNewPointOfInteresetFromAbscissa(m_cursor->x(), direction);
-  if (std::isnan(newPointOfInterest.abscissa)) {
+bool CalculationGraphController::moveCursorHorizontally(int direction, bool fast) {
+  if (!m_isActive) {
     return false;
   }
-  m_cursor->moveTo(newPointOfInterest.abscissa, newPointOfInterest.value);
+  Coordinate2D<double> newPointOfInterest = computeNewPointOfInterestFromAbscissa(m_cursor->x(), direction);
+  if (std::isnan(newPointOfInterest.x1())) {
+    return false;
+  }
+  assert(App::app()->functionStore()->modelForRecord(m_record)->plotType() == Shared::ContinuousFunction::PlotType::Cartesian);
+  m_cursor->moveTo(newPointOfInterest.x1(), newPointOfInterest.x1(), newPointOfInterest.x2());
   return true;
 }
 

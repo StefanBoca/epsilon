@@ -2,6 +2,7 @@
 #include "curve_view.h"
 #include <cmath>
 #include <ion.h>
+#include <poincare/ieee754.h>
 #include <assert.h>
 #include <stddef.h>
 #include <float.h>
@@ -15,21 +16,15 @@ uint32_t CurveViewRange::rangeChecksum() {
   return Ion::crc32Word((uint32_t *)data, dataLengthInBytes/sizeof(uint32_t));
 }
 
-float CurveViewRange::yGridUnit() {
-  return 0.0f;
-}
-
-float CurveViewRange::computeGridUnit(Axis axis, float range) {
+float CurveViewRange::computeGridUnit(float minNumberOfUnits, float maxNumberOfUnits, float range) const {
   int a = 0;
   int b = 0;
-  float maxNumberOfUnits = (axis == Axis::X) ? k_maxNumberOfXGridUnits : k_maxNumberOfYGridUnits;
-  float minNumberOfUnits = (axis == Axis::X) ? k_minNumberOfXGridUnits : k_minNumberOfYGridUnits;
   constexpr int unitsCount = 3;
   float units[unitsCount] = {k_smallGridUnitMantissa, k_mediumGridUnitMantissa, k_largeGridUnitMantissa};
   for (int k = 0; k < unitsCount; k++) {
     float currentA = units[k];
-    int b1 = std::floor(std::log10(range/(currentA*maxNumberOfUnits)));
-    int b2 = std::floor(std::log10(range/(currentA*minNumberOfUnits)));
+    int b1 = Poincare::IEEE754<float>::exponentBase10(range/(currentA*maxNumberOfUnits));
+    int b2 = Poincare::IEEE754<float>::exponentBase10(range/(currentA*minNumberOfUnits));
     if (b1 != b2) {
       b = b2;
       a = currentA;

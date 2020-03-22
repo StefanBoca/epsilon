@@ -1,6 +1,7 @@
 #include "controller.h"
 #include "app.h"
 #include "../apps_container.h"
+#include "../global_preferences.h"
 extern "C" {
 #include <assert.h>
 }
@@ -44,8 +45,8 @@ View * Controller::ContentView::subviewAtIndex(int index) {
   return &m_selectableTableView;
 }
 
-void Controller::ContentView::layoutSubviews() {
-  m_selectableTableView.setFrame(bounds());
+void Controller::ContentView::layoutSubviews(bool force) {
+  m_selectableTableView.setFrame(bounds(), force);
 }
 
 Controller::Controller(Responder * parentResponder, SelectableTableViewDataSource * selectionDataSource) :
@@ -57,9 +58,14 @@ Controller::Controller(Responder * parentResponder, SelectableTableViewDataSourc
 bool Controller::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     AppsContainer * container = AppsContainer::sharedAppsContainer();
-    bool switched = container->switchTo(container->appSnapshotAtIndex(selectionDataSource()->selectedRow()*k_numberOfColumns+selectionDataSource()->selectedColumn()+1));
-    assert(switched);
-    (void) switched; // Silence compilation warning about unused variable.
+    ::App::Snapshot * selectedSnapshot = container->appSnapshotAtIndex(selectionDataSource()->selectedRow()*k_numberOfColumns+selectionDataSource()->selectedColumn()+1);
+    if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Dutch && selectedSnapshot->descriptor()->name() == I18n::Message::CodeApp) {
+      App::app()->displayWarning(I18n::Message::ForbidenAppInExamMode1, I18n::Message::ForbidenAppInExamMode2);
+    } else {
+      bool switched = container->switchTo(selectedSnapshot);
+      assert(switched);
+      (void) switched; // Silence compilation warning about unused variable.
+    }
     return true;
   }
 
@@ -84,18 +90,15 @@ void Controller::didBecomeFirstResponder() {
   Container::activeApp()->setFirstResponder(m_view.selectableTableView());
 }
 
-void Controller::viewWillAppear() {
-}
-
 View * Controller::view() {
   return &m_view;
 }
 
-int Controller::numberOfRows() {
+int Controller::numberOfRows() const {
   return ((numberOfIcons()-1)/k_numberOfColumns)+1;
 }
 
-int Controller::numberOfColumns() {
+int Controller::numberOfColumns() const {
   return k_numberOfColumns;
 }
 
@@ -111,7 +114,7 @@ HighlightCell * Controller::reusableCell(int index) {
   return &m_cells[index];
 }
 
-int Controller::reusableCellCount() {
+int Controller::reusableCellCount() const {
   return k_maxNumberOfCells;
 }
 
@@ -128,7 +131,7 @@ void Controller::willDisplayCellAtLocation(HighlightCell * cell, int i, int j) {
   }
 }
 
-int Controller::numberOfIcons() {
+int Controller::numberOfIcons() const {
   AppsContainer * container = AppsContainer::sharedAppsContainer();
   assert(container->numberOfApps() > 0);
   return container->numberOfApps() - 1;

@@ -79,6 +79,7 @@ void MenuController::didBecomeFirstResponder() {
 }
 
 void MenuController::viewWillAppear() {
+  ViewController::viewWillAppear();
   updateAddScriptRowDisplay();
 }
 
@@ -126,8 +127,11 @@ void MenuController::renameSelectedScript() {
   ScriptNameCell * myCell = static_cast<ScriptNameCell *>(m_selectableTableView.selectedCell());
   Container::activeApp()->setFirstResponder(myCell);
   myCell->setHighlighted(false);
-  myCell->textField()->setEditing(true);
-  myCell->textField()->setCursorLocation(myCell->textField()->text() + strlen(myCell->textField()->text()));
+  TextField * tf = myCell->textField();
+  const char * previousText = tf->text();
+  tf->setEditing(true);
+  tf->setText(previousText);
+  tf->setCursorLocation(tf->text() + strlen(previousText));
 }
 
 void MenuController::deleteScript(Script script) {
@@ -153,7 +157,11 @@ void MenuController::scriptContentEditionDidFinish() {
   reloadConsole();
 }
 
-int MenuController::numberOfRows() {
+void MenuController::willExitApp() {
+  m_editorController.willExitApp();
+}
+
+int MenuController::numberOfRows() const {
   return m_scriptStore->numberOfScripts() + m_shouldDisplayAddScriptRow;
 }
 
@@ -283,24 +291,6 @@ bool MenuController::textFieldShouldFinishEditing(TextField * textField, Ion::Ev
     || event == Ion::Events::Down || event == Ion::Events::Up;
 }
 
-bool MenuController::textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) {
-  if (event == Ion::Events::Right
-      && textField->isEditing()
-      && textField->cursorLocation() == textField->text() + textField->draftTextLength()) {
-    return true;
-  }
-  if (event == Ion::Events::Clear && textField->isEditing()) {
-    constexpr size_t k_bufferSize = 4;
-    char buffer[k_bufferSize] = {'.', 0, 0, 0};
-    assert(k_bufferSize >= 1 + strlen(ScriptStore::k_scriptExtension) + 1);
-    strlcpy(&buffer[1], ScriptStore::k_scriptExtension, strlen(ScriptStore::k_scriptExtension) + 1);
-    textField->setText(buffer);
-    textField->setCursorLocation(textField->text());
-    return true;
-  }
-  return false;
-}
-
 bool MenuController::textFieldDidFinishEditing(TextField * textField, const char * text, Ion::Events::Event event) {
   const char * newName;
   static constexpr int bufferSize = Script::k_defaultScriptNameMaxSize + 1 + ScriptStore::k_scriptExtensionLength; //"script99" + "." + "py"
@@ -312,9 +302,9 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
     // The user entered an empty name. Use a numbered default script name.
     bool foundDefaultName = Script::DefaultName(numberedDefaultName, Script::k_defaultScriptNameMaxSize);
     int defaultNameLength = strlen(numberedDefaultName);
-    assert(defaultNameLength < bufferSize);
     assert(UTF8Decoder::CharSizeOfCodePoint('.') == 1);
     numberedDefaultName[defaultNameLength++] = '.';
+    assert(defaultNameLength < bufferSize);
     strlcpy(numberedDefaultName + defaultNameLength, ScriptStore::k_scriptExtension, bufferSize - defaultNameLength);
     /* If there are already scripts named script1.py, script2.py,... until
      * Script::k_maxNumberOfDefaultScriptNames, we want to write the last tried

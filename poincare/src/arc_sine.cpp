@@ -2,7 +2,7 @@
 #include <poincare/complex.h>
 #include <poincare/layout_helper.h>
 #include <poincare/serialization_helper.h>
-#include <poincare/simplification_helper.h>
+
 #include <cmath>
 
 namespace Poincare {
@@ -19,8 +19,8 @@ int ArcSineNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloa
   return SerializationHelper::Prefix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, ArcSine::s_functionHelper.name());
 }
 
-Expression ArcSineNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return ArcSine(this).shallowReduce(context, complexFormat, angleUnit, target);
+Expression ArcSineNode::shallowReduce(ReductionContext reductionContext) {
+  return ArcSine(this).shallowReduce(reductionContext);
 }
 
 template<typename T>
@@ -44,24 +44,20 @@ Complex<T> ArcSineNode::computeOnComplex(const std::complex<T> c, Preferences::C
       result.imag(-result.imag()); // other side of the cut
     }
   }
-  result = Trigonometry::RoundToMeaningfulDigits(result, c);
+  result = ApproximationHelper::NeglectRealOrImaginaryPartIfNeglectable(result, c);
   return Complex<T>::Builder(Trigonometry::ConvertRadianToAngleUnit(result, angleUnit));
 }
 
 
-Expression ArcSine::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ExpressionNode::ReductionTarget target) {
+Expression ArcSine::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
-#if MATRIX_EXACT_REDUCING
-  if (childAtIndex(0).type() == Type::Matrix) {
-    return SimplificationHelper::Map(*this, context, angleUnit);
-  }
-#endif
-  return Trigonometry::shallowReduceInverseFunction(*this, context, complexFormat, angleUnit, target);
+  return Trigonometry::shallowReduceInverseFunction(*this, reductionContext);
 }
 
 }

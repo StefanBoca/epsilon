@@ -8,8 +8,6 @@
 
 namespace OnBoarding {
 
-#ifdef EPSILON_BOOT_PROMPT
-
 class PopUpController : public ViewController {
 public:
   PopUpController(I18n::Message * messages, KDColor * colors, uint8_t numberOfMessages);
@@ -22,7 +20,7 @@ private:
   protected:
     int numberOfSubviews() const override;
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
+    void layoutSubviews(bool force = false) override;
   private:
     constexpr static KDCoordinate k_bottomMargin = 13;
     constexpr static KDCoordinate k_okMargin = 10;
@@ -32,8 +30,6 @@ private:
   };
   MessageViewWithSkip m_messageViewWithSkip;
 };
-
-#endif
 
 }
 

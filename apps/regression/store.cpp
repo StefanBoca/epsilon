@@ -19,13 +19,14 @@ static_assert(Store::k_numberOfSeries == 3, "Number of series changed, Regressio
 Store::Store() :
   InteractiveCurveViewRange(),
   DoublePairStore(),
-  m_seriesChecksum{0, 0, 0},
   m_angleUnit(Poincare::Preferences::AngleUnit::Degree)
 {
-  for (int i = 0; i < k_numberOfSeries; i++) {
-    m_regressionTypes[i] = Model::Type::Linear;
-    m_regressionChanged[i] = false;
-  }
+  resetMemoization();
+}
+
+void Store::reset() {
+  deleteAllPairs();
+  resetMemoization();
 }
 
 void Store::tidy() {
@@ -59,7 +60,7 @@ int Store::closestVerticalDot(int direction, double x, double y, int currentSeri
     for (int i = 0; i <= numberOfPoints; i++) {
       double currentX = i < numberOfPoints ? m_data[series][0][i] : meanOfColumn(series, 0);
       double currentY = i < numberOfPoints ? m_data[series][1][i] : meanOfColumn(series, 1);
-      if (m_xMin <= currentX && currentX <= m_xMax // The next dot is within the window abscissa bounds
+      if (xMin() <= currentX && currentX <= xMax() // The next dot is within the window abscissa bounds
           && (std::fabs(currentX - x) <= std::fabs(nextX - x)) // The next dot is the closest to x in abscissa
           && ((currentY > y && direction > 0) // The next dot is above/under y
             || (currentY < y && direction < 0)
@@ -140,6 +141,7 @@ int Store::nextDot(int series, int direction, int dot) {
 /* Window */
 
 void Store::setDefault() {
+  m_yAuto = true;
   float minX = FLT_MAX;
   float maxX = -FLT_MAX;
   for (int series = 0; series < k_numberOfSeries; series++) {
@@ -151,7 +153,6 @@ void Store::setDefault() {
   float range = maxX - minX;
   setXMin(minX - k_displayHorizontalMarginRatio*range);
   setXMax(maxX + k_displayHorizontalMarginRatio*range);
-  setYAuto(true);
 }
 
 /* Series */
@@ -188,6 +189,13 @@ double Store::doubleCastedNumberOfPairsOfSeries(int series) const {
   return DoublePairStore::numberOfPairsOfSeries(series);
 }
 
+void Store::resetMemoization() {
+  assert(((int)Model::Type::Linear) == 0);
+  memset(m_seriesChecksum, 0, sizeof(m_seriesChecksum));
+  memset(m_regressionTypes, 0, sizeof(m_regressionTypes));
+  memset(m_regressionChanged, 0, sizeof(m_regressionChanged));
+}
+
 float Store::maxValueOfColumn(int series, int i) const {
   float maxColumn = -FLT_MAX;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
@@ -204,45 +212,53 @@ float Store::minValueOfColumn(int series, int i) const {
   return minColumn;
 }
 
-double Store::squaredValueSumOfColumn(int series, int i) const {
+double Store::squaredValueSumOfColumn(int series, int i, bool lnOfSeries) const {
   double result = 0;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    result += m_data[series][i][k]*m_data[series][i][k];
+    if (lnOfSeries) {
+      result += log(m_data[series][i][k]) * log(m_data[series][i][k]);
+    } else {
+      result += m_data[series][i][k]*m_data[series][i][k];
+    }
   }
   return result;
 }
 
-double Store::columnProductSum(int series) const {
+double Store::columnProductSum(int series, bool lnOfSeries) const {
   double result = 0;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    result += m_data[series][0][k]*m_data[series][1][k];
+    if (lnOfSeries) {
+      result += log(m_data[series][0][k]) * log(m_data[series][1][k]);
+    } else {
+      result += m_data[series][0][k] * m_data[series][1][k];
+    }
   }
   return result;
 }
 
-double Store::meanOfColumn(int series, int i) const {
-  return numberOfPairsOfSeries(series) == 0 ? 0 : sumOfColumn(series, i)/numberOfPairsOfSeries(series);
+double Store::meanOfColumn(int series, int i, bool lnOfSeries) const {
+  return numberOfPairsOfSeries(series) == 0 ? 0 : sumOfColumn(series, i, lnOfSeries)/numberOfPairsOfSeries(series);
 }
 
-double Store::varianceOfColumn(int series, int i) const {
-  double mean = meanOfColumn(series, i);
-  return squaredValueSumOfColumn(series, i)/numberOfPairsOfSeries(series) - mean*mean;
+double Store::varianceOfColumn(int series, int i, bool lnOfSeries) const {
+  double mean = meanOfColumn(series, i, lnOfSeries);
+  return squaredValueSumOfColumn(series, i, lnOfSeries)/numberOfPairsOfSeries(series) - mean*mean;
 }
 
-double Store::standardDeviationOfColumn(int series, int i) const {
-  return std::sqrt(varianceOfColumn(series, i));
+double Store::standardDeviationOfColumn(int series, int i, bool lnOfSeries) const {
+  return std::sqrt(varianceOfColumn(series, i, lnOfSeries));
 }
 
-double Store::covariance(int series) const {
-  return columnProductSum(series)/numberOfPairsOfSeries(series) - meanOfColumn(series, 0)*meanOfColumn(series, 1);
+double Store::covariance(int series, bool lnOfSeries) const {
+  return columnProductSum(series, lnOfSeries)/numberOfPairsOfSeries(series) - meanOfColumn(series, 0, lnOfSeries)*meanOfColumn(series, 1, lnOfSeries);
 }
 
-double Store::slope(int series) const {
-  return LinearModelHelper::Slope(covariance(series), varianceOfColumn(series, 0));
+double Store::slope(int series, bool lnOfSeries) const {
+  return LinearModelHelper::Slope(covariance(series, lnOfSeries), varianceOfColumn(series, 0, lnOfSeries));
 }
 
-double Store::yIntercept(int series) const {
-  return LinearModelHelper::YIntercept(meanOfColumn(series, 1), meanOfColumn(series, 0), slope(series));
+double Store::yIntercept(int series, bool lnOfSeries) const {
+  return LinearModelHelper::YIntercept(meanOfColumn(series, 1, lnOfSeries), meanOfColumn(series, 0, lnOfSeries), slope(series, lnOfSeries));
 }
 
 double Store::yValueForXValue(int series, double x, Poincare::Context * globalContext) {

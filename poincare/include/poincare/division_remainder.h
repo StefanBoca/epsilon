@@ -3,6 +3,7 @@
 
 #include <poincare/approximation_helper.h>
 #include <poincare/expression.h>
+#include <poincare/integer.h>
 
 namespace Poincare {
 
@@ -21,19 +22,21 @@ public:
   // ExpressionNode
   Type type() const override { return Type::DivisionRemainder; }
 
-  // Complex
-  bool isReal(Context & context) const override { return true; }
+
+  // Simplification
+  LayoutShape leftLayoutShape() const override { return LayoutShape::MoreLetters; };
+  LayoutShape rightLayoutShape() const override { return LayoutShape::BoundaryPunctuation; }
 
 private:
   // Layout
   Layout createLayout(Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const override;
   int serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const override;
   // Simplification
-  Expression shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) override;
+  Expression shallowReduce(ReductionContext reductionContext) override;
   // Evaluation
-  Evaluation<float> approximate(SinglePrecision p, Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const override { return templatedApproximate<float>(context, complexFormat, angleUnit); }
-  Evaluation<double> approximate(DoublePrecision p, Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const override { return templatedApproximate<double>(context, complexFormat, angleUnit); }
-  template<typename T> Evaluation<T> templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const;
+  Evaluation<float> approximate(SinglePrecision p, Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const override { return templatedApproximate<float>(context, complexFormat, angleUnit); }
+  Evaluation<double> approximate(DoublePrecision p, Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const override { return templatedApproximate<double>(context, complexFormat, angleUnit); }
+  template<typename T> Evaluation<T> templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const;
 };
 
 class DivisionRemainder final : public Expression {
@@ -43,7 +46,8 @@ public:
   static constexpr Expression::FunctionHelper s_functionHelper = Expression::FunctionHelper("rem", 2, &UntypedBuilderTwoChildren<DivisionRemainder>);
 
   // Expression
-  Expression shallowReduce();
+  Expression shallowReduce(Context * context);
+  static Expression Reduce(const Integer & a, const Integer & b);
 };
 
 }

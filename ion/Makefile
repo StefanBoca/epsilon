@@ -12,7 +12,10 @@ endif
 SFLAGS += -Iion/include/ion/keyboard/$(ION_KEYBOARD_LAYOUT)
 
 include ion/src/$(PLATFORM)/Makefile
+-include ion/test/$(PLATFORM)/Makefile
 include ion/src/shared/tools/Makefile
+
+ion_console_display_src += ion/src/shared/console_display.cpp
 
 # We need to work around a GCC bug (concerning versions < 5.1). It is valid in
 # C++11 to initialize a character array by providing a string litteral (e.g.
@@ -21,20 +24,20 @@ include ion/src/shared/tools/Makefile
 initializer_list = $(shell echo $(1) | sed  "s/\(.\)/'\1',/g")0
 $(call object_for,ion/src/shared/platform_info.cpp): SFLAGS += -DPATCH_LEVEL="$(call initializer_list,$(PATCH_LEVEL))" -DEPSILON_VERSION="$(call initializer_list,$(EPSILON_VERSION))"
 
-src += $(addprefix ion/src/shared/, \
+ion_src += $(addprefix ion/src/shared/, \
+  console_line.cpp \
   crc32_eat_byte.cpp \
   decompress.cpp \
   events.cpp \
-  led.cpp \
   platform_info.cpp \
   storage.cpp \
   unicode/utf8_decoder.cpp\
   unicode/utf8_helper.cpp\
 )
 
-src += ion/src/external/lz4/lz4.c
+ion_src += ion/src/external/lz4/lz4.c
 
-tests += $(addprefix ion/test/,\
+tests_src += $(addprefix ion/test/,\
   crc32.cpp\
   events.cpp\
   keyboard.cpp\
@@ -43,10 +46,17 @@ tests += $(addprefix ion/test/,\
   utf8_helper.cpp\
 )
 
-TEST_EXT_FLASH_REPROGRAM ?= 0
-SFLAGS += -DTEST_EXT_FLASH_REPROGRAM=$(TEST_EXT_FLASH_REPROGRAM)
-external_flash_tests += ion/test/external_flash.cpp
-
 ifdef ION_STORAGE_LOG
 SFLAGS += -DION_STORAGE_LOG=1
 endif
+
+# Configure variants
+ion_all_src = $(ion_src)
+ion_all_src += $(ion_simulator_sdl_src) $(ion_simulator_headless_src)
+ion_all_src += $(ion_device_dfu_relocated_src) $(ion_device_dfu_xip_src)
+ion_all_src += $(ion_console_display_src) $(ion_console_stdio_src) $(ion_console_uart_src)
+
+ion_default_src = $(ion_src) $(ion_simulator_sdl_src) $(ion_device_dfu_relocated_src) $(ion_console_stdio_src)
+ion_console_on_screen_src = $(ion_src) $(ion_simulator_sdl_src) $(ion_device_dfu_relocated_src) $(ion_console_display_src)
+ion_xip_src = $(ion_src) $(ion_simulator_sdl_src) $(ion_device_dfu_xip_src) $(ion_console_uart_src)
+ion_headless_src = $(ion_src) $(ion_simulator_headless_src) $(ion_device_dfu_relocated_src) $(ion_console_stdio_src)

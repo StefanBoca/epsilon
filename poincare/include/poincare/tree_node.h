@@ -39,16 +39,17 @@ constexpr static int ByteAlignment = sizeof(AlignedNodeBuffer);
 class TreeNode {
   friend class TreePool;
 public:
-  static constexpr int NoNodeIdentifier = -1;
+  static constexpr uint16_t NoNodeIdentifier = -2;
+  static constexpr uint16_t OverflowIdentifier = TreeNode::NoNodeIdentifier + 1; // Used for Integer
 
   // Constructor and destructor
   virtual ~TreeNode() {}
 
   // Attributes
-  void setParentIdentifier(int parentID) { m_parentIdentifier = parentID; }
+  void setParentIdentifier(uint16_t parentID) { m_parentIdentifier = parentID; }
   void deleteParentIdentifier() { m_parentIdentifier = NoNodeIdentifier; }
   virtual size_t size() const = 0;
-  int identifier() const { return m_identifier; }
+  uint16_t identifier() const { return m_identifier; }
   int retainCount() const { return m_referenceCounter; }
   size_t deepSize(int realNumberOfChildren) const;
 
@@ -59,7 +60,7 @@ public:
   void setReferenceCounter(int refCount) { m_referenceCounter = refCount; }
   void retain() { m_referenceCounter++; }
   void release(int currentNumberOfChildren);
-  void rename(int identifier, bool unregisterPreviousIdentifier);
+  void rename(uint16_t identifier, bool unregisterPreviousIdentifier);
 
   // Hierarchy
   virtual TreeNode * parent() const;
@@ -82,8 +83,23 @@ public:
   virtual void didAddChildAtIndex(int newNumberOfChildren) {}
 
   // Serialization
+  // Return the number of chars written, without the null-terminating char.
   virtual int serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const { assert(false); return 0; }
-  virtual bool childNeedsParenthesis(const TreeNode * child) const { return false; };
+  /* When serializing, we turn a tree into a string. In order not to lose
+   * structure information, we sometimes need to add system parentheses (that
+   * are invisible when turning the string back into a tree).
+   * For example:
+   * - Layout:
+   *  2                                                                               (2
+   * --- π --> [[2]/[3]]π which keeps the omitted multiplication and forbid to parse --- π
+   *  3                                                                                3)
+   * - Expression:
+   *  2+3
+   * ----- --> [2+3]/4 to keep the fraction structure
+   *   4
+   *
+   * */
+  virtual bool childNeedsSystemParenthesesAtSerialization(const TreeNode * child) const { return false; }
 
   template <typename T>
   class Iterator {
@@ -156,6 +172,8 @@ public:
   void log(std::ostream & stream, bool recursive = true);
 #endif
 
+  static bool IsValidIdentifier(uint16_t id) { return id < NoNodeIdentifier; }
+
 protected:
   TreeNode() :
     m_identifier(NoNodeIdentifier),
@@ -167,9 +185,9 @@ private:
   void updateParentIdentifierInChildren() const {
     changeParentIdentifierInChildren(m_identifier);
   }
-  void changeParentIdentifierInChildren(int id) const;
-  int16_t m_identifier;
-  int16_t m_parentIdentifier;
+  void changeParentIdentifierInChildren(uint16_t id) const;
+  uint16_t m_identifier;
+  uint16_t m_parentIdentifier;
   int8_t m_referenceCounter;
 };
 

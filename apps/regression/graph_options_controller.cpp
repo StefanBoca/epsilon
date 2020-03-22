@@ -16,7 +16,6 @@ GraphOptionsController::GraphOptionsController(Responder * parentResponder, Inpu
   m_store(store),
   m_graphController(graphController)
 {
-  static_cast<ExpressionView *>(m_changeRegressionCell.subAccessoryView())->setHorizontalMargin(Metric::ExpressionViewHorizontalMargin);
 }
 
 const char * GraphOptionsController::title() {
@@ -55,7 +54,7 @@ bool GraphOptionsController::handleEvent(Ion::Events::Event event) {
   return false;
 }
 
-int GraphOptionsController::numberOfRows() {
+int GraphOptionsController::numberOfRows() const {
   return k_numberOfParameterCells + 1;
 }
 

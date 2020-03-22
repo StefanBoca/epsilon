@@ -140,11 +140,14 @@ int ExpressionModelListController::memoizedIndexFromCumulatedHeight(KDCoordinate
   return notMemoizedIndexFromCumulatedHeight(offsetY);
 }
 
-int ExpressionModelListController::numberOfExpressionRows() {
-  if (modelStore()->numberOfModels() == modelStore()->maxNumberOfModels()) {
-    return modelStore()->numberOfModels();
-  }
-  return 1 + modelStore()->numberOfModels();
+int ExpressionModelListController::numberOfExpressionRows() const {
+  const ExpressionModelStore * store = const_cast<ExpressionModelListController *>(this)->modelStore();
+  int modelsCount = store->numberOfModels();
+  return modelsCount + (modelsCount == store->maxNumberOfModels() ? 0 : 1);
+}
+
+bool ExpressionModelListController::isAddEmptyRow(int j) {
+  return j == numberOfExpressionRows() - 1 && modelStore()->numberOfModels() != modelStore()->maxNumberOfModels();
 }
 
 KDCoordinate ExpressionModelListController::expressionRowHeight(int j) {
@@ -213,36 +216,22 @@ void ExpressionModelListController::addEmptyModel() {
 }
 
 void ExpressionModelListController::reinitSelectedExpression(ExpiringPointer<ExpressionModelHandle> model) {
-  model->setContent("");
+  model->setContent("", Container::activeApp()->localContext());
   // Reset memoization of the selected cell which always corresponds to the k_memoizedCellsCount/2 memoized cell
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   selectableTableView()->reloadData();
 }
 
-void ExpressionModelListController::replaceUnknownSymbolWithReadableSymbol(char * text) {
-  size_t textLength = strlen(text);
-  char unknownSymb = modelStore()->unknownSymbol();
-  char symb = modelStore()->symbol();
-  for (size_t i = 0; i < textLength; i++) {
-    if (unknownSymb != 0 && text[i] == unknownSymb) {
-      text[i] = symb;
-    }
-  }
-}
-
 void ExpressionModelListController::editExpression(Ion::Events::Event event) {
-  char * initialText = nullptr;
-  constexpr int initialTextContentMaxSize = Constant::MaxSerializedExpressionSize;
-  char initialTextContent[initialTextContentMaxSize];
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
     ExpiringPointer<ExpressionModelHandle> model = modelStore()->modelForRecord(record);
+    constexpr size_t initialTextContentMaxSize = Constant::MaxSerializedExpressionSize;
+    char initialTextContent[initialTextContentMaxSize];
     model->text(initialTextContent, initialTextContentMaxSize);
-    initialText = initialTextContent;
-    // Replace UCodePointUnknownX with 'x'
-    replaceUnknownSymbolWithReadableSymbol(initialTextContent);
+    inputController()->setTextBody(initialTextContent);
   }
-  inputController()->edit(this, event, this, initialText,
+  inputController()->edit(this, event, this,
       [](void * context, void * sender){
         ExpressionModelListController * myController = static_cast<ExpressionModelListController *>(context);
         InputViewController * myInputViewController = (InputViewController *)sender;
@@ -255,21 +244,18 @@ void ExpressionModelListController::editExpression(Ion::Events::Event event) {
 }
 
 bool ExpressionModelListController::editSelectedRecordWithText(const char * text) {
+  telemetryReportEvent("Edit", text);
   // Reset memoization of the selected cell which always corresponds to the k_memoizedCellsCount/2 memoized cell
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   ExpiringPointer<ExpressionModelHandle> model = modelStore()->modelForRecord(record);
-  return (model->setContent(text) == Ion::Storage::Record::ErrorStatus::None);
+  return (model->setContent(text, Container::activeApp()->localContext()) == Ion::Storage::Record::ErrorStatus::None);
 }
 
 bool ExpressionModelListController::removeModelRow(Ion::Storage::Record record) {
   modelStore()->removeModel(record);
   didChangeModelsList();
   return true;
-}
-
-bool ExpressionModelListController::isAddEmptyRow(int j) {
-  return j == modelStore()->numberOfModels();
 }
 
 void ExpressionModelListController::resetMemoizationForIndex(int index) {

@@ -11,8 +11,8 @@ namespace Sequence {
 static inline int minInt(int x, int y) { return (x < y ? x : y); }
 static inline int maxInt(int x, int y) { return (x > y ? x : y); }
 
-GraphController::GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, SequenceStore * sequenceStore, CurveViewRange * graphRange, CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * rangeVersion, Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header) :
-  FunctionGraphController(parentResponder, inputEventHandlerDelegate, header, graphRange, &m_view, cursor, indexFunctionSelectedByCursor, modelVersion, rangeVersion, angleUnitVersion),
+GraphController::GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, SequenceStore * sequenceStore, CurveViewRange * graphRange, CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * previousModelsVersions, uint32_t * rangeVersion, Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header) :
+  FunctionGraphController(parentResponder, inputEventHandlerDelegate, header, graphRange, &m_view, cursor, indexFunctionSelectedByCursor, modelVersion, previousModelsVersions, rangeVersion, angleUnitVersion),
   m_bannerView(this, inputEventHandlerDelegate, this),
   m_view(sequenceStore, graphRange, m_cursor, &m_bannerView, &m_cursorView),
   m_graphRange(graphRange),
@@ -67,8 +67,8 @@ bool GraphController::textFieldDidFinishEditing(TextField * textField, const cha
     return false;
   }
   floatBody = std::fmax(0, std::round(floatBody));
-  double y = yValue(selectedCurveIndex(), floatBody, myApp->localContext());
-  m_cursor->moveTo(floatBody, y);
+  double y = xyValues(selectedCurveIndex(), floatBody, myApp->localContext()).x2();
+  m_cursor->moveTo(floatBody, floatBody, y);
   interactiveCurveViewRange()->panToMakePointVisible(m_cursor->x(), m_cursor->y(), cursorTopMarginRatio(), k_cursorRightMarginRatio, cursorBottomMarginRatio(), k_cursorLeftMarginRatio);
   reloadBannerView();
   m_view.reload();
@@ -81,7 +81,7 @@ bool GraphController::handleEnter() {
   return FunctionGraphController::handleEnter();
 }
 
-bool GraphController::moveCursorHorizontally(int direction) {
+bool GraphController::moveCursorHorizontally(int direction, bool fast) {
   double xCursorPosition = std::round(m_cursor->x());
   if (direction < 0 && xCursorPosition <= 0) {
     return false;
@@ -94,13 +94,13 @@ bool GraphController::moveCursorHorizontally(int direction) {
     return false;
   }
   Sequence * s = functionStore()->modelForRecord(functionStore()->activeRecordAtIndex(indexFunctionSelectedByCursor()));
-  double y = s->evaluateAtAbscissa(x, textFieldDelegateApp()->localContext());
-  m_cursor->moveTo(x, y);
+  double y = s->evaluateXYAtParameter(x, textFieldDelegateApp()->localContext()).x2();
+  m_cursor->moveTo(x, x, y);
   return true;
 }
 
-double GraphController::defaultCursorAbscissa() {
-  return std::round(Shared::FunctionGraphController::defaultCursorAbscissa());
+double GraphController::defaultCursorT(Ion::Storage::Record record) {
+  return std::fmax(0.0, std::round(Shared::FunctionGraphController::defaultCursorT(record)));
 }
 
 }

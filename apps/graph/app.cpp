@@ -31,17 +31,16 @@ App * App::Snapshot::unpack(Container * container) {
   return new (container->currentAppBuffer()) App(this);
 }
 
+void App::Snapshot::reset() {
+  Shared::FunctionApp::Snapshot::reset();
+  for (int i = 0; i < Shared::ContinuousFunction::k_numberOfPlotTypes; i++) {
+    m_interval[i].reset();
+  }
+}
+
 App::Descriptor * App::Snapshot::descriptor() {
   static Descriptor descriptor;
   return &descriptor;
-}
-
-CartesianFunctionStore * App::Snapshot::functionStore() {
-  return &m_functionStore;
-}
-
-InteractiveCurveViewRange * App::Snapshot::graphRange() {
-  return &m_graphRange;
 }
 
 void App::Snapshot::tidy() {
@@ -51,15 +50,15 @@ void App::Snapshot::tidy() {
 
 App::App(Snapshot * snapshot) :
   FunctionApp(snapshot, &m_inputViewController),
-  m_listController(&m_listFooter, &m_listHeader, &m_listFooter),
+  m_listController(&m_listFooter, &m_listHeader, &m_listFooter, this),
   m_listFooter(&m_listHeader, &m_listController, &m_listController, ButtonRowController::Position::Bottom, ButtonRowController::Style::EmbossedGrey),
   m_listHeader(&m_listStackViewController, &m_listFooter, &m_listController),
   m_listStackViewController(&m_tabViewController, &m_listHeader),
-  m_graphController(&m_graphAlternateEmptyViewController, this, snapshot->functionStore(), snapshot->graphRange(), snapshot->cursor(), snapshot->indexFunctionSelectedByCursor(), snapshot->modelVersion(), snapshot->rangeVersion(), snapshot->angleUnitVersion(), &m_graphHeader),
+  m_graphController(&m_graphAlternateEmptyViewController, this, snapshot->graphRange(), snapshot->cursor(), snapshot->indexFunctionSelectedByCursor(), snapshot->modelVersion(), snapshot->previousModelsVersions(), snapshot->rangeVersion(), snapshot->angleUnitVersion(), &m_graphHeader),
   m_graphAlternateEmptyViewController(&m_graphHeader, &m_graphController, &m_graphController),
   m_graphHeader(&m_graphStackViewController, &m_graphAlternateEmptyViewController, &m_graphController),
   m_graphStackViewController(&m_tabViewController, &m_graphHeader),
-  m_valuesController(&m_valuesAlternateEmptyViewController, this, snapshot->interval(), &m_valuesHeader),
+  m_valuesController(&m_valuesAlternateEmptyViewController, this, &m_valuesHeader),
   m_valuesAlternateEmptyViewController(&m_valuesHeader, &m_valuesController, &m_valuesController),
   m_valuesHeader(&m_valuesStackViewController, &m_valuesAlternateEmptyViewController, &m_valuesController),
   m_valuesStackViewController(&m_tabViewController, &m_valuesHeader),
@@ -68,11 +67,12 @@ App::App(Snapshot * snapshot) :
 {
 }
 
-InputViewController * App::inputViewController() {
-  return &m_inputViewController;
-}
-
-char App::XNT() {
+CodePoint App::XNT() {
+  if (m_inputViewController.isEditing()) {
+    int selectedFunctionIndex = m_listController.selectedRow();
+    Ion::Storage::Record record = functionStore()->recordAtIndex(selectedFunctionIndex);
+    return functionStore()->modelForRecord(record)->symbol();
+  }
   return 'x';
 }
 

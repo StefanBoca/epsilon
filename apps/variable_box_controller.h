@@ -4,7 +4,6 @@
 #define MATRIX_VARIABLES 1
 
 #include <escher.h>
-#include "shared/global_context.h"
 #include "variable_box_empty_controller.h"
 #include <apps/i18n.h>
 
@@ -20,7 +19,7 @@ public:
   bool handleEvent(Ion::Events::Event event) override;
 
   //ListViewDataSource
-  int numberOfRows() override;
+  int numberOfRows() const override;
   int reusableCellCount(int type) override;
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
   KDCoordinate rowHeight(int j) override;
@@ -34,7 +33,7 @@ public:
   };
   void lockDeleteEvent(Page page) { m_lockPageDelete = page; }
 private:
-  constexpr static int k_maxNumberOfDisplayedRows = 6; //240/Metric::ToolboxRowHeight
+ constexpr static int k_maxNumberOfDisplayedRows = (Ion::Display::Height - Metric::TitleBarHeight - Metric::PopUpTopMargin - Metric::StackTitleHeight) / Metric::ToolboxRowHeight + 2; // (240 - 18 - 50 - 20) / 40  = 3.8; the 0.8 cell can be above and below so we add +2 to get 5
   constexpr static int k_numberOfMenuRows = 2;
   constexpr static KDCoordinate k_leafMargin = 20;
   ExpressionTableCellWithExpression * leafCellAtIndex(int index) override;

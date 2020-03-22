@@ -3,7 +3,7 @@
 
 #include <apps/shared/function_title_cell.h>
 #include <apps/shared/function.h>
-#include <apps/shared/text_field_with_extension.h>
+#include "text_field_with_max_length_and_extension.h"
 
 namespace Graph {
 
@@ -15,7 +15,6 @@ public:
   TextField * textField() { return &m_textField; }
   void setEditing(bool editing);
   bool isEditing() const;
-  void setText(const char * textContent);
   void setHorizontalAlignment(float alignment);
 
   // FunctionTitleCell
@@ -35,7 +34,7 @@ public:
     assert(index == 0);
     return &m_textField;
   }
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
 
   // Responder
   void didBecomeFirstResponder() override;
@@ -43,7 +42,7 @@ private:
   constexpr static KDCoordinate k_textFieldRightMargin = 4;
   constexpr static int k_textFieldBufferSize = Shared::Function::k_maxNameWithArgumentSize;
   float verticalAlignmentGivenExpressionBaselineAndRowHeight(KDCoordinate expressionBaseline, KDCoordinate rowHeight) const override;
-  Shared::TextFieldWithExtension m_textField;
+  TextFieldWithMaxLengthAndExtension m_textField;
   char m_textFieldBuffer[k_textFieldBufferSize];
 };
 

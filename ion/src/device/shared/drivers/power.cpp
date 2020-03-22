@@ -10,7 +10,6 @@
 #include <drivers/power.h>
 #include <drivers/usb.h>
 #include <drivers/reset.h>
-#include <drivers/wakeup.h>
 #include <regs/regs.h>
 #include <regs/config/pwr.h>
 #include <regs/config/rcc.h>
@@ -122,17 +121,10 @@ void __attribute__((noinline)) internalFlashStandby() {
   Device::ExternalFlash::shutdown();
   Device::Board::shutdownClocks();
   Device::Power::enterLowPowerMode();
-  Device::Reset::core();
-}
-
-void configWakeUp() {
-  Device::WakeUp::onOnOffKeyDown();
-  Device::WakeUp::onUSBPlugging();
-  Device::WakeUp::onChargingEvent();
+  Device::Reset::coreWhilePlugged();
 }
 
 void stopConfiguration() {
-  // This is done differently on the models
   PWR.CR()->setMRUDS(true); // Main regulator in Low Voltage and Flash memory in Deep Sleep mode when the device is in Stop mode
   PWR.CR()->setLPUDS(true); // Low-power regulator in under-drive mode if LPDS bit is set and Flash memory in power-down when the device is in Stop under-drive mode
   PWR.CR()->setLPDS(true); // Low-power Voltage regulator on. Takes longer to wake up.
@@ -158,28 +150,6 @@ void sleepConfiguration() {
 #endif
 
   CORTEX.SCR()->setSLEEPDEEP(false);
-}
-
-void standbyConfiguration() {
-  PWR.CR()->setPPDS(true); // Select standby when the CPU enters deepsleep
-  PWR.CR()->setCSBF(true); // Clear Standby flag
-  PWR.CSR()->setBRE(false); // Unable back up RAM (lower power consumption in standby)
-  PWR.CSR()->setEIWUP(false); // Unable RTC (lower power consumption in standby)
-
-  /* The pin A0 is about to be configured as a wakeup pin. However, the matrix
-   * keyboard connects pin A0 (row B) with other pins (column 1, column 3...).
-   * We thus shutdown this pins to avoid the potential pull-up on pin A0 due to
-   * a keyboard event. For example, if the "Home" key is down, pin A0 is
-   * pulled-up so enabling it as the wake up pin would trigger a wake up flag
-   * instantly. */
-  Device::Keyboard::shutdown();
-#if REGS_PWR_CONFIG_ADDITIONAL_FIELDS
-  PWR.CSR2()->setEWUP1(true); // Enable PA0 as wakeup pin
-  PWR.CR2()->setWUPP1(false); // Define PA0 (wakeup) pin polarity (rising edge)
-  PWR.CR2()->setCWUPF1(true); // Clear wakeup pin flag for PA0 (if device has already been in standby and woke up)
-#endif
-
-  CORTEX.SCR()->setSLEEPDEEP(true); // Allow Cortex-M7 deepsleep state
 }
 
 void waitUntilOnOffKeyReleased() {

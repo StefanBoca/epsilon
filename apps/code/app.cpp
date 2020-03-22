@@ -44,11 +44,11 @@ bool App::Snapshot::lockOnConsole() const {
   return m_lockOnConsole;
 }
 
-void App::Snapshot::setOpt(const char * name, char * value) {
+void App::Snapshot::setOpt(const char * name, const char * value) {
   if (strcmp(name, "script") == 0) {
     m_scriptStore.deleteAllScripts();
     char * separator = const_cast<char *>(UTF8Helper::CodePointSearch(value, ':'));
-    if (!separator) {
+    if (*separator == 0) {
       return;
     }
     *separator = 0;
@@ -103,6 +103,10 @@ bool App::handleEvent(Ion::Events::Event event) {
     return true;
   }
   return false;
+}
+
+void App::willExitResponderChain(Responder * nextFirstResponder) {
+  m_menuController.willExitApp();
 }
 
 Toolbox * App::toolboxForInputEventHandler(InputEventHandler * textInput) {

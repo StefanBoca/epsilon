@@ -12,8 +12,8 @@ constexpr Expression::FunctionHelper DivisionQuotient::s_functionHelper;
 
 int DivisionQuotientNode::numberOfChildren() const { return DivisionQuotient::s_functionHelper.numberOfChildren(); }
 
-Expression DivisionQuotientNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return DivisionQuotient(this).shallowReduce();
+Expression DivisionQuotientNode::shallowReduce(ReductionContext reductionContext) {
+  return DivisionQuotient(this).shallowReduce(reductionContext.context());
 }
 
 Layout DivisionQuotientNode::createLayout(Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
@@ -24,48 +24,41 @@ int DivisionQuotientNode::serialize(char * buffer, int bufferSize, Preferences::
 }
 
 template<typename T>
-Evaluation<T> DivisionQuotientNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Evaluation<T> DivisionQuotientNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   Evaluation<T> f1Input = childAtIndex(0)->approximate(T(), context, complexFormat, angleUnit);
   Evaluation<T> f2Input = childAtIndex(1)->approximate(T(), context, complexFormat, angleUnit);
   T f1 = f1Input.toScalar();
   T f2 = f2Input.toScalar();
   if (std::isnan(f1) || std::isnan(f2) || f1 != (int)f1 || f2 != (int)f2) {
-    return Complex<T>::Undefined();
+    return Complex<T>::RealUndefined();
   }
   return Complex<T>::Builder(std::floor(f1/f2));
 }
 
 
-Expression DivisionQuotient::shallowReduce() {
+Expression DivisionQuotient::shallowReduce(Context * context) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
   Expression c0 = childAtIndex(0);
   Expression c1 = childAtIndex(1);
-#if MATRIX_EXACT_REDUCING
-  if (c0.type() == ExpressionNode::Type::Matrix || c1.type() == ExpressionNode::Type::Matrix) {
-    Expression result = Undefined::Builder();
-    replaceWithInPlace(result);
-    return result;
+  if (c0.deepIsMatrix(context) || c1.deepIsMatrix(context)) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
   if (c0.type() == ExpressionNode::Type::Rational) {
     Rational r0 = static_cast<Rational &>(c0);
-    if (!r0.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r0.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c1.type() == ExpressionNode::Type::Rational) {
     Rational r1 = static_cast<Rational &>(c1);
-    if (!r1.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r1.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c0.type() != ExpressionNode::Type::Rational || c1.type() != ExpressionNode::Type::Rational) {
@@ -76,16 +69,18 @@ Expression DivisionQuotient::shallowReduce() {
 
   Integer a = r0.signedIntegerNumerator();
   Integer b = r1.signedIntegerNumerator();
+  Expression result = Reduce(a, b);
+  replaceWithInPlace(result);
+  return result;
+}
+
+Expression DivisionQuotient::Reduce(const Integer & a, const Integer & b) {
   if (b.isZero()) {
-    Expression result = Infinity::Builder(a.isNegative());
-    replaceWithInPlace(result);
-    return result;
+    return Infinity::Builder(a.isNegative());
   }
   Integer result = Integer::Division(a, b).quotient;
   assert(!result.isOverflow());
-  Expression rationalResult = Rational::Builder(result);
-  replaceWithInPlace(rationalResult);
-  return rationalResult;
+  return Rational::Builder(result);
 }
 
 }

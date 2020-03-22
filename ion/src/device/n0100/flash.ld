@@ -14,6 +14,8 @@ MEMORY {
 }
 
 STACK_SIZE = 32K;
+FLASH_SECOND_SECTOR_OFFSET = 16K;
+FLASH_SECOND_SECTOR_SIZE = 16K;
 
 SECTIONS {
   .isr_vector_table ORIGIN(FLASH) : {
@@ -35,6 +37,15 @@ SECTIONS {
 
   .header : {
     KEEP(*(.header))
+    ASSERT ((. < ORIGIN(FLASH) + FLASH_SECOND_SECTOR_OFFSET), "Error: ISR table or HEADER overflows in the flash sector reserved for the exam mode");
+  } >FLASH
+
+  .exam_mode_buffer ORIGIN(FLASH) + FLASH_SECOND_SECTOR_OFFSET : {
+    _exam_mode_buffer_start = .;
+    KEEP(*(.exam_mode_buffer))
+    /* Note: We don't increment "." here, we set it. */
+    . = ORIGIN(FLASH) + FLASH_SECOND_SECTOR_OFFSET + FLASH_SECOND_SECTOR_SIZE;
+    _exam_mode_buffer_end = .;
   } >FLASH
 
   .text : {
@@ -108,4 +119,10 @@ SECTIONS {
     . = ALIGN(8);
     _stack_start = .;
   } >SRAM
+
+  /DISCARD/ : {
+    /* exidx and extab are needed for unwinding, which we don't use. */
+    *(.ARM.exidx*)
+    *(.ARM.extab*)
+  }
 }

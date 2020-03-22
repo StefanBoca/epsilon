@@ -2,7 +2,7 @@
 #include <poincare/complex.h>
 #include <poincare/layout_helper.h>
 #include <poincare/serialization_helper.h>
-#include <poincare/simplification_helper.h>
+
 #include <cmath>
 
 namespace Poincare {
@@ -40,28 +40,23 @@ Complex<T> ArcTangentNode::computeOnComplex(const std::complex<T> c, Preferences
       result.real(-result.real()); // other side of the cut
     }
   }
-  result = Trigonometry::RoundToMeaningfulDigits(result, c);
+  result = ApproximationHelper::NeglectRealOrImaginaryPartIfNeglectable(result, c);
   return Complex<T>::Builder(Trigonometry::ConvertRadianToAngleUnit(result, angleUnit));
 }
 
-Expression ArcTangentNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return ArcTangent(this).shallowReduce(context, complexFormat, angleUnit, target);
+Expression ArcTangentNode::shallowReduce(ReductionContext reductionContext) {
+  return ArcTangent(this).shallowReduce(reductionContext);
 }
 
-
-Expression ArcTangent::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ExpressionNode::ReductionTarget target) {
+Expression ArcTangent::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
-#if MATRIX_EXACT_REDUCING
-  if (childAtIndex(0).type() == ExpressionNode::Type::Matrix) {
-    return SimplificationHelper::Map(*this, context, angleUnit);
-  }
-#endif
-  return Trigonometry::shallowReduceInverseFunction(*this, context, complexFormat, angleUnit, target);
+  return Trigonometry::shallowReduceInverseFunction(*this, reductionContext);
 }
 
 }

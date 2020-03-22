@@ -6,7 +6,7 @@ using namespace Poincare;
 namespace Shared {
 
 RangeParameterController::RangeParameterController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, InteractiveCurveViewRange * interactiveRange) :
-  FloatParameterController(parentResponder),
+  FloatParameterController<float>(parentResponder),
   m_interactiveRange(interactiveRange),
   m_xRangeCells{},
   m_yRangeCells{},
@@ -15,13 +15,11 @@ RangeParameterController::RangeParameterController(Responder * parentResponder, 
   for (int i = 0; i < k_numberOfEditableTextCell; i++) {
     m_xRangeCells[i].setParentResponder(&m_selectableTableView);
     m_xRangeCells[i].textField()->setDelegates(inputEventHandlerDelegate, this);
-    m_xRangeCells[i].textField()->setDraftTextBuffer(m_draftTextBuffer);
   }
   for (int i = 0; i < k_numberOfConvertibleTextCell; i++) {
     m_yRangeCells[i].setParentResponder(&m_selectableTableView);
     m_yRangeCells[i].setInteractiveCurveViewRange(m_interactiveRange);
     m_yRangeCells[i].textField()->setDelegates(inputEventHandlerDelegate, this);
-    m_yRangeCells[i].textField()->setDraftTextBuffer(m_draftTextBuffer);
   }
 }
 
@@ -29,7 +27,7 @@ const char * RangeParameterController::title() {
   return I18n::translate(I18n::Message::Axis);
 }
 
-int RangeParameterController::numberOfRows() {
+int RangeParameterController::numberOfRows() const {
   return k_numberOfTextCell+2;
 }
 
@@ -81,14 +79,14 @@ bool RangeParameterController::handleEvent(Ion::Events::Event event) {
   return FloatParameterController::handleEvent(event);
 }
 
-double RangeParameterController::parameterAtIndex(int parameterIndex) {
+float RangeParameterController::parameterAtIndex(int parameterIndex) {
   ParameterGetterPointer getters[k_numberOfTextCell] = {&InteractiveCurveViewRange::xMin,
     &InteractiveCurveViewRange::xMax, &InteractiveCurveViewRange::yMin, &InteractiveCurveViewRange::yMax};
   int index = parameterIndex > 2 ? parameterIndex - 1 : parameterIndex;
   return (m_interactiveRange->*getters[index])();
 }
 
-bool RangeParameterController::setParameterAtIndex(int parameterIndex, double f) {
+bool RangeParameterController::setParameterAtIndex(int parameterIndex, float f) {
   ParameterSetterPointer setters[k_numberOfTextCell] = {&InteractiveCurveViewRange::setXMin,
     &InteractiveCurveViewRange::setXMax, &InteractiveCurveViewRange::setYMin, &InteractiveCurveViewRange::setYMax};
   int index = parameterIndex > 2 ? parameterIndex - 1 : parameterIndex;

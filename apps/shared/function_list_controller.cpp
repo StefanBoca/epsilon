@@ -38,6 +38,7 @@ FunctionListController::FunctionListController(Responder * parentResponder, Butt
 /* TableViewDataSource */
 
 void FunctionListController::viewWillAppear() {
+  ExpressionModelListController::viewWillAppear();
   computeTitlesColumnWidth();
 }
 
@@ -207,6 +208,7 @@ void FunctionListController::didEnterResponderChain(Responder * previousFirstRes
 
 void FunctionListController::willExitResponderChain(Responder * nextFirstResponder) {
   if (nextFirstResponder == tabController()) {
+    assert(tabController() != nullptr);
     selectableTableView()->deselectTable();
     footer()->setSelectedButton(-1);
   }
@@ -237,7 +239,7 @@ void FunctionListController::configureFunction(Ion::Storage::Record record) {
 
 void FunctionListController::computeTitlesColumnWidth(bool forceMax) {
   if (forceMax) {
-    m_titlesColumnWidth = nameWidth(Function::k_maxNameWithArgumentSize - 1)+k_functionTitleSumOfMargins;
+    m_titlesColumnWidth = nameWidth(Poincare::SymbolAbstract::k_maxNameSize + Function::k_parenthesedArgumentCodePointLength - 1)+k_functionTitleSumOfMargins;
     return;
   }
   KDCoordinate maxTitleWidth = maxFunctionNameWidth()+k_functionTitleSumOfMargins;
@@ -246,10 +248,6 @@ void FunctionListController::computeTitlesColumnWidth(bool forceMax) {
 
 TabViewController * FunctionListController::tabController() const {
   return static_cast<TabViewController *>(parentResponder()->parentResponder()->parentResponder()->parentResponder());
-}
-
-FunctionStore * FunctionListController::modelStore() {
-  return FunctionApp::app()->functionStore();
 }
 
 InputViewController * FunctionListController::inputController() {
@@ -266,7 +264,7 @@ KDCoordinate FunctionListController::maxFunctionNameWidth() {
     assert(dotPosition != nullptr);
     maxNameLength = maxInt(maxNameLength, dotPosition-functionName);
   }
-  return nameWidth(maxNameLength + Function::k_parenthesedArgumentLength);
+  return nameWidth(maxNameLength + Function::k_parenthesedArgumentCodePointLength);
 }
 
 void FunctionListController::didChangeModelsList() {

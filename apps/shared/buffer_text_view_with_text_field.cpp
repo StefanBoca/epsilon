@@ -7,8 +7,7 @@ BufferTextViewWithTextField::BufferTextViewWithTextField(Responder * parentRespo
   View(),
   Responder(parentResponder),
   m_bufferTextView(font, 0.0f, 0.5f),
-  m_textField(this, m_textFieldBuffer, m_textFieldBuffer, k_textFieldBufferSize, inputEventHandlerDelegate, delegate, false, font, 0.0f, 0.5f),
-  m_textFieldBuffer{}
+  m_textField(this, nullptr, TextField::maxBufferSize(), TextField::maxBufferSize(), inputEventHandlerDelegate, delegate, font, 0.0f, 0.5f)
 {
 }
 
@@ -51,9 +50,9 @@ View * BufferTextViewWithTextField::subviewAtIndex(int index) {
   return views[index];
 }
 
-void BufferTextViewWithTextField::layoutSubviews() {
-  m_bufferTextView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, k_bufferTextWidth, bounds().height()));
-  m_textField.setFrame(textFieldFrame());
+void BufferTextViewWithTextField::layoutSubviews(bool force) {
+  m_bufferTextView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, k_bufferTextWidth, bounds().height()), force);
+  m_textField.setFrame(textFieldFrame(), force);
 }
 
 KDRect BufferTextViewWithTextField::textFieldFrame() const {

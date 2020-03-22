@@ -26,113 +26,89 @@ Expression SymbolNode::replaceSymbolWithExpression(const SymbolAbstract & symbol
   return Symbol(this).replaceSymbolWithExpression(symbol, expression);
 }
 
-Expression SymbolNode::replaceUnknown(const Symbol & symbol, const Symbol & unknownSymbol) {
-  return Symbol(this).replaceUnknown(symbol, unknownSymbol);
-}
-
-int SymbolNode::polynomialDegree(Context & context, const char * symbolName) const {
+int SymbolNode::polynomialDegree(Context * context, const char * symbolName) const {
   if (strcmp(m_name, symbolName) == 0) {
     return 1;
   }
   return 0;
 }
 
-int SymbolNode::getPolynomialCoefficients(Context & context, const char * symbolName, Expression coefficients[]) const {
-  return Symbol(this).getPolynomialCoefficients(context, symbolName, coefficients);
+int SymbolNode::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const {
+  return Symbol(this).getPolynomialCoefficients(context, symbolName, coefficients, symbolicComputation);
 }
 
-int SymbolNode::getVariables(Context & context, isVariableTest isVariable, char * variables, int maxSizeVariable) const {
+int SymbolNode::getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable, int nextVariableIndex) const {
   // variables is in fact of type char[k_maxNumberOfVariables][maxSizeVariable]
-  size_t variablesIndex = 0;
-  while(variables[variablesIndex] != 0) {
-    variablesIndex+= maxSizeVariable;
-  }
-  if (isVariable(m_name)) {
+  if (isVariable(m_name, context)) {
     int index = 0;
-    while (variables[index] != 0) {
+    while (index < maxSizeVariable*Expression::k_maxNumberOfVariables && variables[index] != 0) {
       if (strcmp(m_name, &variables[index]) == 0) {
-        return variablesIndex/maxSizeVariable;
+        return nextVariableIndex;
       }
       index+= maxSizeVariable;
     }
-    if ((variablesIndex/maxSizeVariable) < Expression::k_maxNumberOfVariables) {
+    if (nextVariableIndex < Expression::k_maxNumberOfVariables) {
+      assert(variables[nextVariableIndex*maxSizeVariable] == 0);
       if (strlen(m_name) + 1 > (size_t)maxSizeVariable) {
         return -2;
       }
-      strlcpy(&variables[variablesIndex], m_name, maxSizeVariable);
-      variables[variablesIndex+maxSizeVariable] = 0;
-      return variablesIndex/maxSizeVariable+1;
+      strlcpy(&variables[nextVariableIndex*maxSizeVariable], m_name, maxSizeVariable);
+      nextVariableIndex++;
+      if (nextVariableIndex < Expression::k_maxNumberOfVariables) {
+        variables[nextVariableIndex*maxSizeVariable] = 0;
+      }
+      return nextVariableIndex;
     }
     return -1;
   }
-  return variablesIndex/maxSizeVariable;
+  return nextVariableIndex;
 }
 
-float SymbolNode::characteristicXRange(Context & context, Preferences::AngleUnit angleUnit) const {
-  return isUnknown(UCodePointUnknownX) ? NAN : 0.0f;
-}
-
-bool SymbolNode::isReal(Context & context) const {
-  Symbol s(this);
-  return SymbolAbstract::isReal(s, context);
+float SymbolNode::characteristicXRange(Context * context, Preferences::AngleUnit angleUnit) const {
+  return isUnknown() ? NAN : 0.0f;
 }
 
 Layout SymbolNode::createLayout(Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
-  if (isUnknown(UCodePointUnknownX)) {
-    return CodePointLayout::Builder('x');
-  }
-  if (isUnknown(UCodePointUnknownN)) {
-    return CodePointLayout::Builder('n');
-  }
+  assert(!isUnknown());
   // TODO return Parse(m_name).createLayout() ?
-  if (strcmp(m_name, "u(n)") == 0) {
-    return HorizontalLayout::Builder(
-        CodePointLayout::Builder('u'),
-        VerticalOffsetLayout::Builder(
-          CodePointLayout::Builder('n'),
-          VerticalOffsetLayoutNode::Position::Subscript));
-  }
-  if (strcmp(m_name, "u(n+1)") == 0) {
-    return HorizontalLayout::Builder(
-      CodePointLayout::Builder('u'),
-      VerticalOffsetLayout::Builder(
-        LayoutHelper::String("n+1", 3),
-        VerticalOffsetLayoutNode::Position::Subscript));
-  }
-  if (strcmp(m_name, "v(n)") == 0) {
-    return HorizontalLayout::Builder(
-        CodePointLayout::Builder('v'),
-        VerticalOffsetLayout::Builder(
-          CodePointLayout::Builder('n'),
-          VerticalOffsetLayoutNode::Position::Subscript));
-  }
-  if (strcmp(m_name, "v(n+1)") == 0) {
-    return HorizontalLayout::Builder(
-      CodePointLayout::Builder('v'),
-      VerticalOffsetLayout::Builder(
-        LayoutHelper::String("n+1", 3),
-          VerticalOffsetLayoutNode::Position::Subscript));
+  // Special case for the symbol names: u(n), u(n+1), v(n), v(n+1), w(n), w(n+1)
+  const char * sequenceIndex[] = {"n", "n+1"};
+  for (char sequenceName = 'u'; sequenceName <= 'w'; sequenceName++) {
+    if (m_name[0] == sequenceName) {
+      for (size_t i = 0; i < sizeof(sequenceIndex)/sizeof(char *); i++) {
+        size_t sequenceIndexLength = strlen(sequenceIndex[i]);
+        if (m_name[1] == '(' && strncmp(sequenceIndex[i], m_name+2, sequenceIndexLength) == 0 && m_name[2+sequenceIndexLength] == ')' && m_name[3+sequenceIndexLength] == 0) {
+      return HorizontalLayout::Builder(
+          CodePointLayout::Builder(sequenceName),
+          VerticalOffsetLayout::Builder(
+            LayoutHelper::String(sequenceIndex[i], sequenceIndexLength),
+            VerticalOffsetLayoutNode::Position::Subscript));
+        }
+      }
+    }
   }
   return LayoutHelper::String(m_name, strlen(m_name));
 }
 
-int SymbolNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
-  if (bufferSize == 0) {
-    return -1;
+Expression SymbolNode::shallowReduce(ReductionContext reductionContext) {
+  return Symbol(this).shallowReduce(reductionContext);
+}
+
+Expression SymbolNode::deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly) {
+  return Symbol(this).deepReplaceReplaceableSymbols(context, didReplace, replaceFunctionsOnly);
+}
+
+ExpressionNode::LayoutShape SymbolNode::leftLayoutShape() const {
+  UTF8Decoder decoder(m_name);
+  decoder.nextCodePoint();
+  if (decoder.nextCodePoint() == UCodePointNull) {  // nextCodePoint asserts that the first character is non-null
+    return LayoutShape::OneLetter;
   }
-  return strlcpy(buffer, m_name, bufferSize);
-}
-
-Expression SymbolNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return Symbol(this).shallowReduce(context, complexFormat, angleUnit, target, symbolicComputation);
-}
-
-Expression SymbolNode::shallowReplaceReplaceableSymbols(Context & context) {
-  return Symbol(this).shallowReplaceReplaceableSymbols(context);
+  return LayoutShape::MoreLetters;
 }
 
 template<typename T>
-Evaluation<T> SymbolNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+Evaluation<T> SymbolNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
   Symbol s(this);
   Expression e = SymbolAbstract::Expand(s, context, false);
   if (e.isUninitialized()) {
@@ -141,17 +117,8 @@ Evaluation<T> SymbolNode::templatedApproximate(Context& context, Preferences::Co
   return e.node()->approximate(T(), context, complexFormat, angleUnit);
 }
 
-Expression Symbol::UntypedBuilder(const char * name, size_t length, Context * context) {
-  // create an expression only if it is not in the context or defined as a symbol
-  Symbol s = Symbol::Builder(name, length);
-  if (SymbolAbstract::ValidInContext(s, context)) {
-    return s;
-  }
-  return Expression();
-}
-
-bool SymbolNode::isUnknown(CodePoint unknownSymbol) const {
-  bool result = UTF8Helper::CodePointIs(m_name, unknownSymbol);
+bool SymbolNode::isUnknown() const {
+  bool result = UTF8Helper::CodePointIs(m_name, UCodePointUnknown);
   if (result) {
     assert(m_name[1] == 0);
   }
@@ -167,7 +134,7 @@ Symbol Symbol::Builder(CodePoint name) {
   return Symbol::Builder(buffer, codePointLength);
 }
 
-bool Symbol::isSeriesSymbol(const char * c) {
+bool Symbol::isSeriesSymbol(const char * c, Poincare::Context * context) {
   // [NV][1-3]
   if (c[2] == 0 && (c[0] == 'N' || c[0] == 'V') && c[1] >= '1' && c[1] <= '3') {
     return true;
@@ -175,7 +142,7 @@ bool Symbol::isSeriesSymbol(const char * c) {
   return false;
 }
 
-bool Symbol::isRegressionSymbol(const char * c) {
+bool Symbol::isRegressionSymbol(const char * c, Poincare::Context * context) {
   // [XY][1-3]
   if (c[2] == 0 && (c[0] == 'X' || c[0] == 'Y') && c[1] >= '1' && c[1] <= '3') {
     return true;
@@ -183,12 +150,18 @@ bool Symbol::isRegressionSymbol(const char * c) {
   return false;
 }
 
-Expression Symbol::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ExpressionNode::ReductionTarget target, bool symbolicComputation) {
-  Expression parentExpression = parent();
+Expression Symbol::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
+  if (reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::ReplaceDefinedFunctionsWithDefinitions) {
+    return *this;
+  }
+  if (reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::ReplaceAllSymbolsWithUndefinedAndDoNotReplaceUnits
+      || reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::ReplaceAllSymbolsWithUndefinedAndReplaceUnits)
+  {
+    return replaceWithUndefinedInPlace();
+  }
   {
     Expression current = *this;
-    Expression p = parentExpression;
-
+    Expression p = parent();
     while (!p.isUninitialized()) {
       if (p.isParameteredExpression()) {
         int index = p.indexOfChild(current);
@@ -210,26 +183,23 @@ Expression Symbol::shallowReduce(Context & context, Preferences::ComplexFormat c
     }
   }
 
-  Symbol s = *this;
-  Expression result = SymbolAbstract::Expand(s, context, true);
+  Expression result = SymbolAbstract::Expand(*this, reductionContext.context(), true);
   if (result.isUninitialized()) {
-    if (symbolicComputation) {
+    if (reductionContext.symbolicComputation() != ExpressionNode::SymbolicComputation::ReplaceAllSymbolsWithDefinitionsOrUndefined) {
       return *this;
     }
     result = Undefined::Builder();
   }
-  if (!parentExpression.isUninitialized()) {
-    parentExpression.replaceChildInPlace(*this, result);
-  }
+  replaceWithInPlace(result);
   // The stored expression is as entered by the user, so we need to call reduce
-  return result.deepReduce(context, complexFormat, angleUnit, target, symbolicComputation);
+  return result.deepReduce(reductionContext);
 }
 
 Expression Symbol::replaceSymbolWithExpression(const SymbolAbstract & symbol, const Expression & expression) {
   if (symbol.type() == ExpressionNode::Type::Symbol && strcmp(name(), symbol.name()) == 0) {
     Expression value = expression.clone();
     Expression p = parent();
-    if (!p.isUninitialized() && p.node()->childNeedsParenthesis(value.node())) {
+    if (!p.isUninitialized() && p.node()->childAtIndexNeedsUserParentheses(value, p.indexOfChild(*this))) {
       value = Parenthesis::Builder(value);
     }
     replaceWithInPlace(value);
@@ -238,14 +208,7 @@ Expression Symbol::replaceSymbolWithExpression(const SymbolAbstract & symbol, co
   return *this;
 }
 
-Expression Symbol::replaceUnknown(const Symbol & symbol, const Symbol & unknownSymbol) {
-  assert(!symbol.isUninitialized());
-  assert(symbol.type() == ExpressionNode::Type::Symbol);
-  assert(unknownSymbol.type() == ExpressionNode::Type::Symbol);
-  return replaceSymbolWithExpression(symbol, unknownSymbol);
-}
-
-int Symbol::getPolynomialCoefficients(Context & context, const char * symbolName, Expression coefficients[]) const {
+int Symbol::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const {
   if (strcmp(name(), symbolName) == 0) {
     coefficients[0] = Rational::Builder(0);
     coefficients[1] = Rational::Builder(1);
@@ -255,15 +218,26 @@ int Symbol::getPolynomialCoefficients(Context & context, const char * symbolName
   return 0;
 }
 
-Expression Symbol::shallowReplaceReplaceableSymbols(Context & context) {
-  if (isSystemSymbol()) {
+Expression Symbol::deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly) {
+  if (replaceFunctionsOnly || isSystemSymbol()) {
     return *this;
   }
-  Expression e = context.expressionForSymbol(*this, true);
+  Expression e = context->expressionForSymbolAbstract(*this, true);
   if (e.isUninitialized()) {
     return *this;
   }
+  // If the symbol contains itself, return undefined
+  if (e.hasExpression([](Expression e, const void * context) {
+          if (e.type() != ExpressionNode::Type::Symbol) {
+            return false;
+          }
+          return strcmp(static_cast<Symbol&>(e).name(), reinterpret_cast<const char *>(context)) == 0;
+        }, reinterpret_cast<const void *>(name())))
+  {
+    return replaceWithUndefinedInPlace();
+  }
   replaceWithInPlace(e);
+  *didReplace = true;
   return e;
 }
 

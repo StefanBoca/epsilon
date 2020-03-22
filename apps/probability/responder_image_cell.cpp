@@ -3,10 +3,10 @@
 
 namespace Probability {
 
-ResponderImageCell::ResponderImageCell(Responder * parentResponder, Law * law, Calculation * calculation, CalculationController * calculationController) :
+ResponderImageCell::ResponderImageCell(Responder * parentResponder, Distribution * distribution, Calculation * calculation, CalculationController * calculationController) :
   HighlightCell(),
   Responder(parentResponder),
-  m_calculationTypeController(nullptr, law, calculation, calculationController)
+  m_calculationTypeController(nullptr, distribution, calculation, calculationController)
 {
 }
 
@@ -46,8 +46,8 @@ View * ResponderImageCell::subviewAtIndex(int index) {
   return &m_imageCell;
 }
 
-void ResponderImageCell::layoutSubviews() {
-  m_imageCell.setFrame(KDRect(k_outline, k_outline, bounds().width()-2*k_outline, bounds().height()-2*k_outline));
+void ResponderImageCell::layoutSubviews(bool force) {
+  m_imageCell.setFrame(KDRect(k_outline, k_outline, bounds().width()-2*k_outline, bounds().height()-2*k_outline), force);
 }
 
 }

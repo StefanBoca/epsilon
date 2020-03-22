@@ -1,11 +1,11 @@
-src += $(addprefix ion/src/blackbox/, \
+ion_src += $(addprefix ion/src/blackbox/, \
   boot.cpp \
   ion.cpp \
   display.cpp \
   events.cpp \
 )
 
-src += $(addprefix ion/src/shared/, \
+ion_src += $(addprefix ion/src/shared/, \
   console_line.cpp \
   console_stdio.cpp \
   crc32.cpp \
@@ -17,6 +17,7 @@ src += $(addprefix ion/src/shared/, \
   dummy/battery.cpp \
   dummy/display.cpp \
   dummy/events_modifier.cpp \
+  dummy/exam_mode.cpp \
   dummy/fcc_id.cpp \
   dummy/led.cpp \
   dummy/keyboard.cpp \

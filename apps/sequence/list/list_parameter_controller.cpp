@@ -11,11 +11,10 @@ namespace Sequence {
 ListParameterController::ListParameterController(::InputEventHandlerDelegate * inputEventHandlerDelegate, ListController * listController) :
   Shared::ListParameterController(listController, I18n::Message::SequenceColor, I18n::Message::DeleteSequence, this),
   m_typeCell(I18n::Message::SequenceType),
-  m_initialRankCell(&m_selectableTableView, inputEventHandlerDelegate, this, m_draftTextBuffer, I18n::Message::FirstTermIndex),
-  m_typeParameterController(this, listController, TableCell::Layout::Horizontal, Metric::CommonTopMargin, Metric::CommonRightMargin,
+  m_initialRankCell(&m_selectableTableView, inputEventHandlerDelegate, this, I18n::Message::FirstTermIndex),
+  m_typeParameterController(this, listController, TableCell::Layout::HorizontalLeftOverlap, Metric::CommonTopMargin, Metric::CommonRightMargin,
     Metric::CommonBottomMargin, Metric::CommonLeftMargin)
 {
-  static_cast<ExpressionView *>(m_typeCell.subAccessoryView())->setHorizontalMargin(Metric::ExpressionViewHorizontalMargin);
 }
 
 const char * ListParameterController::title() {

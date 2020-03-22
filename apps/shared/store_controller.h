@@ -16,6 +16,7 @@ class StoreController : public EditableCellTableViewController, public ButtonRow
 public:
   StoreController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, DoublePairStore * store, ButtonRowController * header);
   View * view() override { return &m_contentView; }
+  TELEMETRY_ID("Store");
 
   virtual StoreContext * storeContext() = 0;
   void displayFormulaInput();
@@ -28,7 +29,7 @@ public:
   bool textFieldDidAbortEditing(TextField * textField) override;
 
   // TableViewDataSource
-  int numberOfColumns() override;
+  int numberOfColumns() const override;
   KDCoordinate columnWidth(int i) override;
   KDCoordinate cumulatedWidthFromIndex(int i) override;
   int indexFromCumulatedWidth(KDCoordinate offsetX) override;
@@ -45,9 +46,8 @@ public:
   void didBecomeFirstResponder() override;
 
 protected:
-  static constexpr KDCoordinate k_cellWidth = 116;
-  static constexpr KDCoordinate k_margin = 8;
-  static constexpr KDCoordinate k_scrollBarMargin = Metric::CommonRightMargin;
+  static constexpr KDCoordinate k_cellWidth = Poincare::PrintFloat::glyphLengthForFloatWithPrecision(Poincare::Preferences::LargeNumberOfSignificantDigits) * 7 + 2*Metric::CellMargin + Metric::TableSeparatorThickness; // KDFont::SmallFont->glyphSize().width() = 7
+
   constexpr static int k_maxNumberOfEditableCells = (Ion::Display::Width/k_cellWidth+2) * ((Ion::Display::Height - Metric::TitleBarHeight - Metric::TabHeight)/k_cellHeight+2);
   constexpr static int k_numberOfTitleCells = 4;
   static constexpr int k_titleCellType = 0;
@@ -62,12 +62,10 @@ protected:
   // Responder
   void didBecomeFirstResponder() override;
   private:
-    static constexpr KDCoordinate k_margin = 8;
-    static constexpr KDCoordinate k_scrollBarMargin = Metric::CommonRightMargin;
     static constexpr KDCoordinate k_formulaInputHeight = 31;
     int numberOfSubviews() const override { return 1 + m_displayFormulaInputView; }
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
+    void layoutSubviews(bool force = false) override;
     KDRect formulaFrame() const;
     StoreSelectableTableView m_dataView;
     BufferTextViewWithTextField m_formulaInputView;
@@ -75,21 +73,23 @@ protected:
   };
 
   Responder * tabController() const override;
-  SelectableTableView * selectableTableView() override;
-  bool cellAtLocationIsEditable(int columnIndex, int rowIndex) override;
   bool setDataAtLocation(double floatBody, int columnIndex, int rowIndex) override;
   double dataAtLocation(int columnIndex, int rowIndex) override;
-  int numberOfElements() override;
-  int maxNumberOfElements() const override;
   virtual HighlightCell * titleCells(int index) = 0;
-  char m_draftTextBuffer[TextField::maxBufferSize()];
   int seriesAtColumn(int column) const { return column / DoublePairStore::k_numberOfColumnsPerSeries; }
   bool privateFillColumnWithFormula(Poincare::Expression formula, Poincare::ExpressionNode::isVariableTest isVariable);
   virtual StoreParameterController * storeParameterController() = 0;
   StoreCell m_editableCells[k_maxNumberOfEditableCells];
   DoublePairStore * m_store;
 private:
-  bool cellShouldBeTransparent(int i, int j);
+  SelectableTableView * selectableTableView() override {
+    return m_contentView.dataView();
+  }
+  bool cellAtLocationIsEditable(int columnIndex, int rowIndex) override;
+  int numberOfElementsInColumn(int columnIndex) const override;
+  int maxNumberOfElements() const override {
+    return DoublePairStore::k_maxNumberOfPairs;
+  };
   ContentView m_contentView;
 };
 

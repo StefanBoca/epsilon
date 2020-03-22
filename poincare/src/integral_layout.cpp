@@ -23,7 +23,7 @@ const uint8_t bottomSymbolPixel[IntegralLayoutNode::k_symbolHeight][IntegralLayo
   {0xFF, 0xFF, 0x00, 0x00},
 };
 
-void IntegralLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void IntegralLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == upperBoundLayout()
       || cursor->layoutNode() == lowerBoundLayout())
   {
@@ -63,7 +63,7 @@ void IntegralLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldReco
   }
 }
 
-void IntegralLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void IntegralLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == upperBoundLayout()
       || cursor->layoutNode() == lowerBoundLayout())
   {
@@ -104,7 +104,7 @@ void IntegralLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void IntegralLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void IntegralLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(lowerBoundLayout(), true)) {
     // If the cursor is inside the lower bound, move it to the upper bound.
     upperBoundLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
@@ -118,7 +118,7 @@ void IntegralLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomp
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void IntegralLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void IntegralLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(upperBoundLayout(), true)) {
     // If the cursor is inside the upper bound, move it to the lower bound.
     lowerBoundLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
@@ -159,13 +159,31 @@ int IntegralLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Pr
     return bufferSize-1;
   }
 
-  // Write the opening parenthesis
+  /* TODO
+   * For now, we serialize
+   *    2
+   *    ∫3dx as int{{3},{x},{1},{2}}
+   *    1
+   * To save space, we could serialize it as int{3}{x}{1}{2} and modify the
+   * parser accordingly.
+   * This could be done for other layouts too. */
+
+  /* Add system parentheses to avoid serializing:
+   *   2)+(1          2),1
+   *    ∫    (5)dx or  ∫    (5)dx
+   *    1             1+binomial(3
+   */
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointLeftSystemParenthesis);
   if (numberOfChar >= bufferSize-1) {
     return bufferSize-1;
   }
 
-  LayoutNode * argLayouts[] = {const_cast<IntegralLayoutNode *>(this)->integrandLayout(), const_cast<IntegralLayoutNode *>(this)->differentialLayout(), const_cast<IntegralLayoutNode *>(this)->lowerBoundLayout(), const_cast<IntegralLayoutNode *>(this)->upperBoundLayout()};
+  LayoutNode * argLayouts[] = {
+    const_cast<IntegralLayoutNode *>(this)->integrandLayout(),
+    const_cast<IntegralLayoutNode *>(this)->differentialLayout(),
+    const_cast<IntegralLayoutNode *>(this)->lowerBoundLayout(),
+    const_cast<IntegralLayoutNode *>(this)->upperBoundLayout()};
+
   for (uint8_t i = 0; i < sizeof(argLayouts)/sizeof(argLayouts[0]); i++) {
     if (i != 0) {
       // Write the comma
@@ -173,15 +191,22 @@ int IntegralLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Pr
       if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
     }
 
-    // Write the argument
+    // Write the argument with system parentheses
+    numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointLeftSystemParenthesis);
+    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
     numberOfChar += argLayouts[i]->serialize(buffer+numberOfChar, bufferSize-numberOfChar, floatDisplayMode, numberOfSignificantDigits);
+    if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
+    numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
     if (numberOfChar >= bufferSize-1) { return bufferSize-1; }
   }
 
-  // Write the closing parenthesis
+  // Write the closing system parenthesis
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, UCodePointRightSystemParenthesis);
-  buffer[numberOfChar] = 0;
   return numberOfChar;
+}
+
+CodePoint IntegralLayoutNode::XNTCodePoint(int childIndex) const {
+  return (childIndex == k_integrandLayoutIndex || childIndex == k_differentialLayoutIndex) ? CodePoint('x') : UCodePointNull;
 }
 
 KDSize IntegralLayoutNode::computeSize() {
@@ -223,7 +248,7 @@ KDPoint IntegralLayoutNode::positionOfChild(LayoutNode * child) {
   return KDPoint(x,y);
 }
 
-void IntegralLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void IntegralLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   KDSize integrandSize = integrandLayout()->layoutSize();
   KDSize differentialSize = differentialLayout()->layoutSize();
   KDSize upperBoundSize = upperBoundLayout()->layoutSize();

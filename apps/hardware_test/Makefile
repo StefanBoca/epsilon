@@ -1,4 +1,4 @@
-app_src += $(addprefix apps/hardware_test/,\
+app_hardware_test_src = $(addprefix apps/hardware_test/,\
   app.cpp \
   arrow_view.cpp \
   battery_test_controller.cpp \
@@ -6,6 +6,7 @@ app_src += $(addprefix apps/hardware_test/,\
   colors_lcd_test_controller.cpp \
   dead_pixels_test_controller.cpp \
   keyboard_test_controller.cpp \
+  keyboard_model.cpp \
   keyboard_view.cpp \
   lcd_data_test_controller.cpp \
   lcd_timing_test_controller.cpp \
@@ -14,3 +15,5 @@ app_src += $(addprefix apps/hardware_test/,\
   serial_number_controller.cpp \
   vblank_test_controller.cpp \
 )
+
+app_src += $(app_hardware_test_src)

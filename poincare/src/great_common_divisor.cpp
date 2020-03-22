@@ -1,5 +1,6 @@
 #include <poincare/great_common_divisor.h>
 
+#include <poincare/approximation_helper.h>
 #include <poincare/arithmetic.h>
 #include <poincare/layout_helper.h>
 #include <poincare/rational.h>
@@ -21,28 +22,26 @@ int GreatCommonDivisorNode::serialize(char * buffer, int bufferSize, Preferences
   return SerializationHelper::Prefix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, GreatCommonDivisor::s_functionHelper.name());
 }
 
-Expression GreatCommonDivisorNode::shallowReduce(Context & context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation) {
-  return GreatCommonDivisor(this).shallowReduce();
+Expression GreatCommonDivisorNode::shallowReduce(ReductionContext reductionContext) {
+  return GreatCommonDivisor(this).shallowReduce(reductionContext.context());
 }
 
 template<typename T>
-Evaluation<T> GreatCommonDivisorNode::templatedApproximate(Context& context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
-  Evaluation<T> f1Input = childAtIndex(0)->approximate(T(), context, complexFormat, angleUnit);
-  Evaluation<T> f2Input = childAtIndex(1)->approximate(T(), context, complexFormat, angleUnit);
-  T f1 = f1Input.toScalar();
-  T f2 = f2Input.toScalar();
-  if (std::isnan(f1) || std::isnan(f2) || f1 != (int)f1 || f2 != (int)f2) {
-    return Complex<T>::Undefined();
+Evaluation<T> GreatCommonDivisorNode::templatedApproximate(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) const {
+  bool isUndefined = false;
+  int a = ApproximationHelper::PositiveIntegerApproximationIfPossible<T>(childAtIndex(0), &isUndefined, context, complexFormat, angleUnit);
+  int b = ApproximationHelper::PositiveIntegerApproximationIfPossible<T>(childAtIndex(1), &isUndefined, context, complexFormat, angleUnit);
+  if (isUndefined) {
+    return Complex<T>::RealUndefined();
   }
-  int a = (int)f2;
-  int b = (int)f1;
-  if (f1 > f2) {
+  if (b > a) {
+    int temp = b;
     b = a;
-    a = (int)f1;
+    a = temp;
   }
   int r = 0;
   while((int)b!=0){
-    r = a - ((int)(a/b))*b;
+    r = a - (a/b)*b;
     a = b;
     b = r;
   }
@@ -50,34 +49,29 @@ Evaluation<T> GreatCommonDivisorNode::templatedApproximate(Context& context, Pre
 }
 
 
-Expression GreatCommonDivisor::shallowReduce() {
+Expression GreatCommonDivisor::shallowReduce(Context * context) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }
   }
   Expression c0 = childAtIndex(0);
   Expression c1 = childAtIndex(1);
-#if MATRIX_EXACT_REDUCING
-  if (c0.type() == ExpressionNode::Type::Matrix || c1.type() == ExpressionNode::Type::Matrix) {
-    return Undefined::Builder();
+  if (c0.deepIsMatrix(context) || c1.deepIsMatrix(context)) {
+    return replaceWithUndefinedInPlace();
   }
-#endif
   if (c0.type() == ExpressionNode::Type::Rational) {
     Rational r0 = static_cast<Rational &>(c0);
-    if (!r0.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r0.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c1.type() == ExpressionNode::Type::Rational) {
     Rational r1 = static_cast<Rational&>(c1);
-    if (!r1.integerDenominator().isOne()) {
-      Expression result = Undefined::Builder();
-      replaceWithInPlace(result);
-      return result;
+    if (!r1.isInteger()) {
+      return replaceWithUndefinedInPlace();
     }
   }
   if (c0.type() != ExpressionNode::Type::Rational || c1.type() != ExpressionNode::Type::Rational) {

@@ -1,8 +1,8 @@
 #include "calculation.h"
-#include "calculation_store.h"
 #include "../shared/poincare_helpers.h"
 #include "../global_preferences.h"
-#include <poincare/symbol.h>
+#include "../exam_mode_configuration.h"
+#include <poincare/exception_checkpoint.h>
 #include <poincare/undefined.h>
 #include <poincare/unreal.h>
 #include <string.h>
@@ -15,128 +15,54 @@ namespace Calculation {
 
 static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
 
-Calculation::Calculation() :
-  m_inputText(),
-  m_exactOutputText(),
-  m_approximateOutputText(),
-  m_displayOutput(DisplayOutput::Unknown),
-  m_height(-1),
-  m_expandedHeight(-1),
-  m_equalSign(EqualSign::Unknown)
-{
-}
-
 bool Calculation::operator==(const Calculation& c) {
-  return strcmp(m_inputText, c.m_inputText) == 0
-      && strcmp(m_approximateOutputText, c.m_approximateOutputText) == 0
+  return strcmp(inputText(), c.inputText()) == 0
+      && strcmp(approximateOutputText(NumberOfSignificantDigits::Maximal), c.approximateOutputText(NumberOfSignificantDigits::Maximal)) == 0
+      && strcmp(approximateOutputText(NumberOfSignificantDigits::UserDefined), c.approximateOutputText(NumberOfSignificantDigits::UserDefined)) == 0
       /* Some calculations can make appear trigonometric functions in their
        * exact output. Their argument will be different with the angle unit
        * preferences but both input and approximate output will be the same.
        * For example, i^(sqrt(3)) = cos(sqrt(3)*pi/2)+i*sin(sqrt(3)*pi/2) if
        * angle unit is radian and i^(sqrt(3)) = cos(sqrt(3)*90+i*sin(sqrt(3)*90)
        * in degree. */
-      && strcmp(m_exactOutputText, c.m_exactOutputText) == 0;
+      && strcmp(exactOutputText(), c.exactOutputText()) == 0;
 }
 
-void Calculation::reset() {
-  m_inputText[0] = 0;
-  m_exactOutputText[0] = 0;
-  m_approximateOutputText[0] = 0;
-  tidy();
-}
-
-void Calculation::setContent(const char * c, Context * context, Expression ansExpression) {
-  reset();
-  {
-    Symbol ansSymbol = Symbol::Ans();
-    Expression input = Expression::Parse(c).replaceSymbolWithExpression(ansSymbol, ansExpression);
-    /* We do not store directly the text enter by the user because we do not want
-     * to keep Ans symbol in the calculation store. */
-    PoincareHelpers::Serialize(input, m_inputText, sizeof(m_inputText));
+Calculation * Calculation::next() const {
+  const char * result = reinterpret_cast<const char *>(this) + sizeof(Calculation);
+  for (int i = 0; i < k_numberOfExpressions; i++) {
+    result = result + strlen(result) + 1; // Pass inputText, exactOutputText, ApproximateOutputText x2
   }
-  Expression exactOutput;
-  Expression approximateOutput;
-  if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Activate) {
-    PoincareHelpers::ParseAndSimplifyAndApproximate(m_inputText, &exactOutput, &approximateOutput, *context, false);
-  } else {
-    PoincareHelpers::ParseAndSimplifyAndApproximate(m_inputText, &exactOutput, &approximateOutput, *context);
-  }
-  PoincareHelpers::Serialize(exactOutput, m_exactOutputText, sizeof(m_exactOutputText));
-  PoincareHelpers::Serialize(approximateOutput, m_approximateOutputText, sizeof(m_approximateOutputText));
-}
-
-KDCoordinate Calculation::height(Context * context, bool expanded) {
-  KDCoordinate * memoizedHeight = expanded ? &m_expandedHeight : &m_height;
-  if (*memoizedHeight < 0) {
-    DisplayOutput display = displayOutput(context);
-    Layout inputLayout = createInputLayout();
-    KDCoordinate inputHeight = inputLayout.layoutSize().height();
-    if (display == DisplayOutput::ExactOnly) {
-      KDCoordinate exactOutputHeight = createExactOutputLayout().layoutSize().height();
-      *memoizedHeight = inputHeight+exactOutputHeight;
-    } else if (display == DisplayOutput::ApproximateOnly || (!expanded && display == DisplayOutput::ExactAndApproximateToggle)) {
-      KDCoordinate approximateOutputHeight = createApproximateOutputLayout(context).layoutSize().height();
-      *memoizedHeight = inputHeight+approximateOutputHeight;
-    } else {
-      assert(display == DisplayOutput::ExactAndApproximate || (display == DisplayOutput::ExactAndApproximateToggle && expanded));
-      Layout approximateLayout = createApproximateOutputLayout(context);
-      Layout exactLayout = createExactOutputLayout();
-      KDCoordinate approximateOutputHeight = approximateLayout.layoutSize().height();
-      KDCoordinate exactOutputHeight = exactLayout.layoutSize().height();
-      KDCoordinate outputHeight = maxCoordinate(exactLayout.baseline(), approximateLayout.baseline()) + maxCoordinate(exactOutputHeight-exactLayout.baseline(), approximateOutputHeight-approximateLayout.baseline());
-      *memoizedHeight = inputHeight + outputHeight;
-    }
-    /* For all display output except ExactAndApproximateToggle, the selected
-     * height and the usual height are identical. We update both heights in
-     * theses cases. */
-    if (display != DisplayOutput::ExactAndApproximateToggle) {
-      m_height = *memoizedHeight;
-      m_expandedHeight = *memoizedHeight;
-    }
-  }
-  return *memoizedHeight;
-}
-
-const char * Calculation::inputText() {
-  return m_inputText;
-}
-
-const char * Calculation::exactOutputText() {
-  return m_exactOutputText;
-}
-
-const char * Calculation::approximateOutputText() {
-  return m_approximateOutputText;
-}
-
-Expression Calculation::input() {
-  return Expression::Parse(m_inputText);
-}
-
-Layout Calculation::createInputLayout() {
-  return input().createLayout(Preferences::PrintFloatMode::Decimal, PrintFloat::k_numberOfStoredSignificantDigits);
-}
-
-bool Calculation::isEmpty() {
-  /* To test if a calculation is empty, we need to test either m_inputText or
-   * m_exactOutputText or m_approximateOutputText, the only three fields that
-   * are not lazy-loaded. We choose m_exactOutputText to consider that a
-   * calculation being added is still empty until the end of the method
-   * 'setContent'. Indeed, during 'setContent' method, 'ans' evaluation calls
-   * the evaluation of the last calculation only if the calculation being
-   * filled is not taken into account.*/
-  if (strlen(m_approximateOutputText) == 0) {
-    return true;
-  }
-  return false;
+  return reinterpret_cast<Calculation *>(const_cast<char *>(result));
 }
 
 void Calculation::tidy() {
-  /* Uninitialized all Expression stored to free the Pool */
-  m_displayOutput = DisplayOutput::Unknown;
+  /* Reset height memoization (the complex format could have changed when
+   * re-entering Calculation app which would impact the heights). */
   m_height = -1;
   m_expandedHeight = -1;
-  m_equalSign = EqualSign::Unknown;
+}
+
+const char * Calculation::approximateOutputText(NumberOfSignificantDigits numberOfSignificantDigits) const {
+  const char * exactOutput = exactOutputText();
+  const char * approximateOutputTextWithMaxNumberOfDigits = exactOutput + strlen(exactOutput) + 1;
+  if (numberOfSignificantDigits == NumberOfSignificantDigits::Maximal) {
+    return approximateOutputTextWithMaxNumberOfDigits;
+  }
+  return approximateOutputTextWithMaxNumberOfDigits + strlen(approximateOutputTextWithMaxNumberOfDigits) + 1;
+}
+
+const char * Calculation::approximateOutputText(NumberOfSignificantDigits numberOfSignificantDigits) const {
+  const char * exactOutput = exactOutputText();
+  const char * approximateOutputTextWithMaxNumberOfDigits = exactOutput + strlen(exactOutput) + 1;
+  if (numberOfSignificantDigits == NumberOfSignificantDigits::Maximal) {
+    return approximateOutputTextWithMaxNumberOfDigits;
+  }
+  return approximateOutputTextWithMaxNumberOfDigits + strlen(approximateOutputTextWithMaxNumberOfDigits) + 1;
+}
+
+Expression Calculation::input() {
+  return Expression::Parse(m_inputText, nullptr);
 }
 
 Expression Calculation::exactOutput() {
@@ -144,31 +70,162 @@ Expression Calculation::exactOutput() {
    * thereby avoid turning cos(Pi/4) into sqrt(2)/2 and displaying
    * 'sqrt(2)/2 = 0.999906' (which is totally wrong) instead of
    * 'cos(pi/4) = 0.999906' (which is true in degree). */
-  Expression exactOutput = Expression::Parse(m_exactOutputText);
-  if (exactOutput.isUninitialized()) {
-    return Undefined::Builder();
-  }
+  Expression exactOutput = Expression::Parse(exactOutputText(), nullptr);
+  assert(!exactOutput.isUninitialized());
   return exactOutput;
 }
 
-Layout Calculation::createExactOutputLayout() {
-  return PoincareHelpers::CreateLayout(exactOutput());
+Expression Calculation::approximateOutput(Context * context, NumberOfSignificantDigits numberOfSignificantDigits) {
+  Expression exp = Expression::Parse(approximateOutputText(numberOfSignificantDigits), nullptr);
+  assert(!exp.isUninitialized());
+  /* Warning:
+   * Since quite old versions of Epsilon, the Expression 'exp' was used to be
+   * approximated again to ensure its content was in the expected form - a
+   * linear combination of Decimal.
+   * However, since the approximate output may contain units and that a
+   * Poincare::Unit approximates to undef, thus it must not be approximated
+   * anymore.
+   * We have to keep two serializations of the approximation outputs:
+   * - one with the maximal significant digits, to be used by 'ans' or when
+   *   handling 'OK' event on the approximation output.
+   * - one with the displayed number of significant digits that we parse to
+   *   create the displayed layout. If we used the other serialization to
+   *   create the layout, the result of the parsing could be an Integer which
+   *   does not take the number of significant digits into account when creating
+   *   its layout. This would lead to wrong number of significant digits in the
+   *   layout.
+   *   For instance:
+   *        Number of asked significant digits: 7
+   *        Input: "123456780", Approximate output: "1.234567E8"
+   *
+   *  |--------------------------------------------------------------------------------------|
+   *  | Number of significant digits | Approximate text | Parse expression    | Layout       |
+   *  |------------------------------+------------------+---------------------+--------------|
+   *  | Maximal                      | "123456780"      | Integer(123456780)  | "123456780"  |
+   *  |------------------------------+------------------+---------------------+--------------|
+   *  | User defined                 | "1.234567E8"     | Decimal(1.234567E8) | "1.234567E8" |
+   *  |--------------------------------------------------------------------------------------|
+   *
+   */
+   return exp;
 }
 
-Expression Calculation::approximateOutput(Context * context) {
-  /* To ensure that the expression 'm_output' is a matrix or a complex, we
-   * call 'evaluate'. */
-  Expression exp = Expression::Parse(m_approximateOutputText);
-  if (exp.isUninitialized()) {
-    /* TODO: exp might be uninitialized because the serialization did not fit in
-     * the buffer. Put a special error instead of "undef". */
-    return Undefined::Builder();
+Layout Calculation::createInputLayout() {
+  return input().createLayout(Preferences::PrintFloatMode::Decimal, PrintFloat::k_numberOfStoredSignificantDigits);
+}
+
+Layout Calculation::createExactOutputLayout(bool * couldNotCreateExactLayout) {
+  Poincare::ExceptionCheckpoint ecp;
+  if (ExceptionRun(ecp)) {
+    return PoincareHelpers::CreateLayout(exactOutput());
+  } else {
+    *couldNotCreateExactLayout = true;
+    return Layout();
   }
-  return PoincareHelpers::Approximate<double>(exp, *context);
 }
 
-Layout Calculation::createApproximateOutputLayout(Context * context) {
-  return PoincareHelpers::CreateLayout(approximateOutput(context));
+Layout Calculation::createApproximateOutputLayout(Context * context, bool * couldNotCreateApproximateLayout) {
+  Poincare::ExceptionCheckpoint ecp;
+  if (ExceptionRun(ecp)) {
+    return PoincareHelpers::CreateLayout(approximateOutput(context, NumberOfSignificantDigits::UserDefined));
+  } else {
+    *couldNotCreateApproximateLayout = true;
+    return Layout();
+  }
+}
+
+KDCoordinate Calculation::height(Context * context, bool expanded, bool allExpressionsInline) {
+  KDCoordinate result = expanded ? m_expandedHeight : m_height;
+  if (result >= 0) {
+    // Height already computed
+    return result;
+  }
+
+  // Get input height
+  Layout inputLayout = createInputLayout();
+  KDCoordinate inputHeight = inputLayout.layoutSize().height();
+  KDCoordinate inputBaseline = inputLayout.baseline();
+
+  // Get exact output height if needed
+  Poincare::Layout exactLayout;
+  bool couldNotCreateExactLayout = false;
+  if (DisplaysExact(displayOutput(context))) {
+    // Create the exact output layout
+    exactLayout = createExactOutputLayout(&couldNotCreateExactLayout);
+    if (couldNotCreateExactLayout) {
+      if (displayOutput(context) != DisplayOutput::ExactOnly) {
+        forceDisplayOutput(DisplayOutput::ApproximateOnly);
+      } else {
+        /* We should only display the exact result, but we cannot create it
+         * -> raise an exception. */
+        ExceptionCheckpoint::Raise();
+      }
+    }
+  }
+
+  if (displayOutput(context) == DisplayOutput::ExactOnly) {
+    KDCoordinate exactOutputHeight = exactLayout.layoutSize().height();
+    if (allExpressionsInline) {
+      KDCoordinate exactOutputBaseline = exactLayout.baseline();
+      result = maxCoordinate(inputBaseline, exactOutputBaseline) + maxCoordinate(inputHeight - inputBaseline, exactOutputHeight-exactOutputBaseline);
+    } else {
+      result = inputHeight+exactOutputHeight;
+    }
+  } else {
+    bool couldNotCreateApproximateLayout = false;
+    Layout approximateLayout = createApproximateOutputLayout(context, &couldNotCreateApproximateLayout);
+    if (couldNotCreateApproximateLayout) {
+      if (displayOutput(context) == DisplayOutput::ApproximateOnly) {
+        Poincare::ExceptionCheckpoint::Raise();
+      } else {
+        /* Set the display output to ApproximateOnly, make room in the pool by
+         * erasing the exact layout, and retry to create the approximate layout */
+        forceDisplayOutput(DisplayOutput::ApproximateOnly);
+        exactLayout = Poincare::Layout();
+        couldNotCreateApproximateLayout = false;
+        approximateLayout = createApproximateOutputLayout(context, &couldNotCreateApproximateLayout);
+        if (couldNotCreateApproximateLayout) {
+          Poincare::ExceptionCheckpoint::Raise();
+        }
+      }
+    }
+
+    KDCoordinate approximateOutputHeight = approximateLayout.layoutSize().height();
+    if (displayOutput(context) == DisplayOutput::ApproximateOnly || (!expanded && displayOutput(context) == DisplayOutput::ExactAndApproximateToggle)) {
+      if (allExpressionsInline) {
+        KDCoordinate approximateOutputBaseline = approximateLayout.baseline();
+        result = maxCoordinate(inputBaseline, approximateOutputBaseline) + maxCoordinate(inputHeight - inputBaseline, approximateOutputHeight-approximateOutputBaseline);
+      } else {
+        result = inputHeight+approximateOutputHeight;
+      }
+    } else {
+      assert(displayOutput(context) == DisplayOutput::ExactAndApproximate || (displayOutput(context) == DisplayOutput::ExactAndApproximateToggle && expanded));
+      KDCoordinate exactOutputHeight = exactLayout.layoutSize().height();
+      KDCoordinate exactOutputBaseline = exactLayout.baseline();
+      KDCoordinate approximateOutputBaseline = approximateLayout.baseline();
+      if (allExpressionsInline) {
+        result = maxCoordinate(inputBaseline, maxCoordinate(exactOutputBaseline, approximateOutputBaseline)) + maxCoordinate(inputHeight - inputBaseline, maxCoordinate(exactOutputHeight - exactOutputBaseline, approximateOutputHeight-approximateOutputBaseline));
+      } else {
+        KDCoordinate outputHeight = maxCoordinate(exactOutputBaseline, approximateOutputBaseline) + maxCoordinate(exactOutputHeight-exactOutputBaseline, approximateOutputHeight-approximateOutputBaseline);
+        result = inputHeight + outputHeight;
+      }
+    }
+  }
+
+  /* For all display outputs except ExactAndApproximateToggle, the selected
+   * height and the usual height are identical. We update both heights in
+   * theses cases. */
+  if (displayOutput(context) != DisplayOutput::ExactAndApproximateToggle) {
+    m_height = result;
+    m_expandedHeight = result;
+  } else {
+    if (expanded) {
+      m_expandedHeight = result;
+    } else {
+      m_height = result;
+    }
+  }
+  return result;
 }
 
 Calculation::DisplayOutput Calculation::displayOutput(Context * context) {
@@ -177,27 +234,48 @@ Calculation::DisplayOutput Calculation::displayOutput(Context * context) {
   }
   if (shouldOnlyDisplayExactOutput()) {
     m_displayOutput = DisplayOutput::ExactOnly;
-  } else if (input().recursivelyMatches(
-        [](const Expression e, Context & c) {
-          /* If the input contains:
-           * - Random
-           * - Round
-           * or involves a Matrix, we only display the approximate output. */
-          ExpressionNode::Type t = e.type();
-          return (t == ExpressionNode::Type::Random) || (t == ExpressionNode::Type::Round) || Expression::IsMatrix(e, c);
-        },
-        *context, true))
+  } else if (
+      /* If the exact and approximate outputs are equal (with the
+       * UserDefined number of significant digits), do not display the exact
+       * output. Indeed, in this case, the layouts are identical. */
+      strcmp(exactOutputText(), approximateOutputText(NumberOfSignificantDigits::UserDefined)) == 0
+      ||
+      // If the approximate output is 'unreal' or the exact result is 'undef'
+      strcmp(exactOutputText(), Undefined::Name()) == 0 ||
+      strcmp(approximateOutputText(NumberOfSignificantDigits::Maximal), Unreal::Name()) == 0
+      ||
+      /* If the approximate output is 'undef' and the input and exactOutput are
+       * equal */
+      (strcmp(approximateOutputText(NumberOfSignificantDigits::Maximal), Undefined::Name()) == 0 &&
+       strcmp(inputText(), exactOutputText()) == 0)
+      ||
+      // Force all outputs to be ApproximateOnly if required by the exam mode configuration
+      ExamModeConfiguration::exactExpressionsAreForbidden(GlobalPreferences::sharedGlobalPreferences()->examMode())
+      ||
+      /* If the input contains the following types, we only display the
+       * approximate output. */
+      input().recursivelyMatches(
+        [](const Expression e, Context * c) {
+          ExpressionNode::Type approximateOnlyTypes[] = {
+            ExpressionNode::Type::Random,
+            ExpressionNode::Type::Unit,
+            ExpressionNode::Type::Round,
+            ExpressionNode::Type::FracPart,
+            ExpressionNode::Type::Integral,
+            ExpressionNode::Type::Product,
+            ExpressionNode::Type::Sum,
+            ExpressionNode::Type::Derivative,
+            ExpressionNode::Type::ConfidenceInterval,
+            ExpressionNode::Type::PredictionInterval
+          };
+          return e.isOfType(approximateOnlyTypes, sizeof(approximateOnlyTypes)/sizeof(ExpressionNode::Type));
+        }, context, true)
+  )
   {
     m_displayOutput = DisplayOutput::ApproximateOnly;
-  } else if (strcmp(m_exactOutputText, m_approximateOutputText) == 0) {
-    /* If the exact and approximate results' texts are equal and their layouts
-     * too, do not display the exact result. If the two layouts are not equal
-     * because of the number of significant digits, we display both. */
-    m_displayOutput = exactAndApproximateDisplayedOutputsAreEqual(context) == Calculation::EqualSign::Equal ? DisplayOutput::ApproximateOnly : DisplayOutput::ExactAndApproximate;
-  } else if (strcmp(m_exactOutputText, Undefined::Name()) == 0 || strcmp(m_approximateOutputText, Unreal::Name()) == 0) {
-    // If the approximate result is 'unreal' or the exact result is 'undef'
-    m_displayOutput = DisplayOutput::ApproximateOnly;
-  } else if (input().recursivelyMatches(Expression::IsApproximate, *context) || exactOutput().recursivelyMatches(Expression::IsApproximate, *context)) {
+  } else if (input().recursivelyMatches(Expression::IsApproximate, context)
+      || exactOutput().recursivelyMatches(Expression::IsApproximate, context))
+  {
     m_displayOutput = DisplayOutput::ExactAndApproximateToggle;
   } else {
     m_displayOutput = DisplayOutput::ExactAndApproximate;
@@ -205,27 +283,81 @@ Calculation::DisplayOutput Calculation::displayOutput(Context * context) {
   return m_displayOutput;
 }
 
+void Calculation::forceDisplayOutput(DisplayOutput d) {
+  m_displayOutput = d;
+  // Reset heights memoization as it might have changed when we modify the display output
+  m_height = -1;
+  m_expandedHeight = -1;
+}
 bool Calculation::shouldOnlyDisplayExactOutput() {
   /* If the input is a "store in a function", do not display the approximate
    * result. This prevents x->f(x) from displaying x = undef. */
-  return input().type() == ExpressionNode::Type::Store
-    && input().childAtIndex(1).type() == ExpressionNode::Type::Function;
+  Expression i = input();
+  return i.type() == ExpressionNode::Type::Store
+    && i.childAtIndex(1).type() == ExpressionNode::Type::Function;
 }
 
 Calculation::EqualSign Calculation::exactAndApproximateDisplayedOutputsAreEqual(Poincare::Context * context) {
   if (m_equalSign != EqualSign::Unknown) {
     return m_equalSign;
   }
-  constexpr int bufferSize = Constant::MaxSerializedExpressionSize;
-  char buffer[bufferSize];
-  Preferences * preferences = Preferences::sharedPreferences();
-  Expression exactOutputExpression = PoincareHelpers::ParseAndSimplify(m_exactOutputText, *context, false);
-  if (exactOutputExpression.isUninitialized()) {
-    exactOutputExpression = Undefined::Builder();
+  /* Displaying the right equal symbol is less important than displaying a
+   * result, so we do not want exactAndApproximateDisplayedOutputsAreEqual to
+   * create a pool failure that would prevent from displaying a result that we
+   * managed to compute. We thus encapsulate the method in an exception
+   * checkpoint: if there was not enough memory on the pool to compute the equal
+   * sign, just return EqualSign::Approximation.
+   * We can safely use an exception checkpoint here because we are sure of not
+   * modifying any pre-existing node in the pool. We are sure there cannot be a
+   * Store in the exactOutput. */
+  Poincare::ExceptionCheckpoint ecp;
+  if (ExceptionRun(ecp)) {
+    Preferences * preferences = Preferences::sharedPreferences();
+    Preferences::ComplexFormat complexFormat = Expression::UpdatedComplexFormatWithTextInput(preferences->complexFormat(), m_inputText);
+    m_equalSign = Expression::ParsedExpressionsAreEqual(exactOutputText(), approximateOutputText(NumberOfSignificantDigits::UserDefined), context, complexFormat, preferences->angleUnit()) ? EqualSign::Equal : EqualSign::Approximation;
+    return m_equalSign;
+  } else {
+    /* Do not override m_equalSign in case there is enough room in the pool
+     * later to compute it. */
+    return EqualSign::Approximation;
   }
+}
+
+Calculation::AdditionalInformationType Calculation::additionalInformationType(Context * context) {
+  Preferences * preferences = Preferences::sharedPreferences();
   Preferences::ComplexFormat complexFormat = Expression::UpdatedComplexFormatWithTextInput(preferences->complexFormat(), m_inputText);
-  m_equalSign = exactOutputExpression.isEqualToItsApproximationLayout(approximateOutput(context), buffer, bufferSize, complexFormat, preferences->angleUnit(), preferences->displayMode(), preferences->numberOfSignificantDigits(), *context) ? EqualSign::Equal : EqualSign::Approximation;
-  return m_equalSign;
+  Expression i = input();
+  Expression o = exactOutput();
+  /* Special case for Equal and Store:
+   * Equal/Store nodes have to be at the root of the expression, which prevents
+   * from creating new expressions with equal/store node as a child. We don't
+   * return any additional outputs for them to avoid bothering with special
+   * cases. */
+  if (i.type() == ExpressionNode::Type::Equal || i.type() == ExpressionNode::Type::Store) {
+    return AdditionalInformationType::None;
+  }
+  /* Trigonometry additional results are displayed if either input or output is a sin or a cos. Indeed, we want to capture both cases:
+   * - > input: cos(60)
+   *   > output: 1/2
+   * - > input: 2cos(2) - cos(2)
+   *   > output: cos(2)
+   */
+  if (input().isDefinedCosineOrSine(context, complexFormat, preferences->angleUnit()) || o.isDefinedCosineOrSine(context, complexFormat, preferences->angleUnit())) {
+    return AdditionalInformationType::Trigonometry;
+  }
+
+  // TODO: return AdditionalInformationType::Unit
+  if (o.isBasedIntegerCappedBy(k_maximalIntegerWithAdditionalInformation)) {
+    return AdditionalInformationType::Integer;
+  }
+  // Find forms like [12]/[23] or -[12]/[23]
+  if (o.isDivisionOfIntegers() || (o.type() == ExpressionNode::Type::Opposite && o.childAtIndex(0).isDivisionOfIntegers())) {
+    return AdditionalInformationType::Rational;
+  }
+  if (o.hasDefinedComplexApproximation(context, complexFormat, preferences->angleUnit())) {
+    return AdditionalInformationType::Complex;
+  }
+  return AdditionalInformationType::None;
 }
 
 }

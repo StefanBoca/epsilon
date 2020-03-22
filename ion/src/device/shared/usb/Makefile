@@ -29,19 +29,11 @@ usb_src += $(addprefix ion/src/device/shared/usb/stack/descriptor/, \
   webusb_platform_descriptor.cpp\
 )
 
-flasher_src += $(addprefix ion/src/device/shared/usb/, \
-  flasher.cpp \
-)
+# Sources required to execute DFU in place
+ion_device_dfu_xip_src += ion/src/device/shared/usb/dfu_xip.cpp
+ion_device_dfu_xip_src += $(usb_src)
 
-EPSILON_USB_DFU_XIP ?= 0
-
-ifeq ($(EPSILON_USB_DFU_XIP),1)
-
-ion_device_src += ion/src/device/shared/usb/dfu_xip.cpp
-ion_device_src += $(usb_src)
-
-else
-
+# Sources required to execute DFU in RAM
 dfu_src += liba/src/assert.c
 dfu_src += liba/src/strlen.c
 dfu_src += liba/src/strlcpy.c
@@ -51,7 +43,7 @@ dfu_src += libaxx/src/cxxabi/pure_virtual.cpp
 dfu_src += ion/src/device/shared/usb/boot.cpp
 dfu_src += ion/src/device/$(MODEL)/drivers/board.cpp
 dfu_src += ion/src/device/$(MODEL)/drivers/cache.cpp
-dfu_src += ion/src/device/$(MODEL)/usb/stack/device.cpp
+dfu_src += ion/src/device/$(MODEL)/drivers/reset.cpp
 dfu_src += $(addprefix ion/src/device/shared/drivers/, \
   backlight.cpp \
   battery.cpp \
@@ -63,6 +55,7 @@ dfu_src += $(addprefix ion/src/device/shared/drivers/, \
   events_keyboard_platform.cpp \
   external_flash.cpp \
   flash.cpp \
+  internal_flash.cpp \
   keyboard.cpp \
   led.cpp \
   power.cpp\
@@ -87,10 +80,8 @@ $(BUILD_DIR)/ion/src/device/shared/usb/dfu.elf: $(call object_for,$(usb_src) $(d
 # For our purpose, dfu.o can go in rodata section and we rename the start and
 # end of binary symbols: _dfu_bootloader_flash_[start/end]
 $(BUILD_DIR)/ion/src/device/shared/usb/dfu.o: $(BUILD_DIR)/ion/src/device/shared/usb/dfu.bin
-	@echo "OBJCOPY $@"
+	$(call rule_label,OBJCOPY)
 	$(Q) cd $(dir $<) ; $(OBJCOPY) -I binary -O elf32-littlearm -B arm --rename-section .data=.rodata.dfu_bootloader --redefine-sym _binary_dfu_bin_start=_dfu_bootloader_flash_start --redefine-sym _binary_dfu_bin_end=_dfu_bootloader_flash_end $(notdir $<) $(notdir $@)
 
-ion_device_src += ion/src/device/shared/usb/dfu.cpp
-ion_device_src += ion/src/device/shared/usb/dfu_relocated.cpp
-
-endif
+ion_device_dfu_relocated_src += ion/src/device/shared/usb/dfu.cpp
+ion_device_dfu_relocated_src += ion/src/device/shared/usb/dfu_relocated.cpp

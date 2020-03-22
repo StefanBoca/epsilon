@@ -18,7 +18,7 @@ DerivativeParameterController::DerivativeParameterController(ValuesController * 
 }
 
 void DerivativeParameterController::viewWillAppear() {
-  functionStore()->modelForRecord(m_record)->derivativeNameWithArgument(m_pageTitle, k_maxNumberOfCharsInTitle, Shared::CartesianFunction::Symbol());
+  functionStore()->modelForRecord(m_record)->derivativeNameWithArgument(m_pageTitle, k_maxNumberOfCharsInTitle);
 }
 
 const char * DerivativeParameterController::title() {
@@ -58,7 +58,7 @@ bool DerivativeParameterController::handleEvent(Ion::Events::Event event) {
   return false;
 }
 
-int DerivativeParameterController::numberOfRows() {
+int DerivativeParameterController::numberOfRows() const {
   return k_totalNumberOfCell;
 };
 
@@ -73,7 +73,7 @@ HighlightCell * DerivativeParameterController::reusableCell(int index) {
   return cells[index];
 }
 
-int DerivativeParameterController::reusableCellCount() {
+int DerivativeParameterController::reusableCellCount() const {
   return k_totalNumberOfCell;
 }
 
@@ -81,7 +81,7 @@ KDCoordinate DerivativeParameterController::cellHeight() {
   return Metric::ParameterCellHeight;
 }
 
-CartesianFunctionStore * DerivativeParameterController::functionStore() {
+ContinuousFunctionStore * DerivativeParameterController::functionStore() {
   return App::app()->functionStore();
 }
 

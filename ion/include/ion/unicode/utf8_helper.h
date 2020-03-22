@@ -13,18 +13,20 @@ int CountOccurrences(const char * s, CodePoint c);
  * null terminating char otherwise. */
 const char * CodePointSearch(const char * s, CodePoint c);
 
+// Returns true if the text had the code point
+bool HasCodePoint(const char * s, CodePoint c);
+
 /* Returns the first occurence of a code point that is not c in a string,
  * stopping at the null-terminating char or the start of string. */
 const char * NotCodePointSearch(const char * s, CodePoint c, bool goingLeft = false, const char * initialPosition = nullptr);
 
-/* Copy src into dst while removing all code points c. Also update an index
- * that should be lower if code points where removed before it. Ensure null-
+/* Copy src into dst while removing all code points in codePoints. Ensure null-
  * termination of dst. */
-void CopyAndRemoveCodePoint(char * dst, size_t dstSize, const char * src, CodePoint c, const char * * indexToDUpdate = nullptr);
+bool CopyAndRemoveCodePoints(char * dst, size_t dstSize, const char * src, CodePoint * codePoints, int numberOfCodePoints);
 
 /* Remove all code points c. and update an index that should be lower if code
  * points where removed before it. Ensure null-termination of dst. */
-void RemoveCodePoint(char * buffer, CodePoint c, const char * * indexToDUpdate = nullptr, const char * stoppingPosition = nullptr);
+void RemoveCodePoint(char * buffer, CodePoint c, const char * * indexToUpdate = nullptr, const char * stoppingPosition = nullptr);
 
 /* Copy src into dst until end of dst or code point c, with null termination. Return the length of the copy */
 size_t CopyUntilCodePoint(char * dst, size_t dstSize, const char * src, CodePoint c);
@@ -66,10 +68,6 @@ const char * PerformAtCodePoints(
 
 bool PreviousCodePointIs(const char * buffer, const char * location, CodePoint c);
 bool CodePointIs(const char * location, CodePoint c);
-bool CodePointIsLetter(CodePoint c);
-bool CodePointIsLowerCaseLetter(CodePoint c);
-bool CodePointIsUpperCaseLetter(CodePoint c);
-bool CodePointIsNumber(CodePoint c);
 
 // Shift the buffer and return the number of bytes removed.
 int RemovePreviousGlyph(const char * text, char * location, CodePoint * c = nullptr);

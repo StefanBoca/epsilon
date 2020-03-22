@@ -11,7 +11,6 @@ namespace Shared {
 
 class InteractiveCurveViewRange : public MemoizedCurveViewRange {
 public:
-  constexpr static float k_minFloat = 1E-4f;
   InteractiveCurveViewRange(InteractiveCurveViewRangeDelegate * delegate = nullptr) :
     MemoizedCurveViewRange(),
     m_yAuto(true),
@@ -40,34 +39,35 @@ public:
   void centerAxisAround(Axis axis, float position);
   void panToMakePointVisible(float x, float y, float topMarginRatio, float rightMarginRatio, float bottomMarginRation, float leftMarginRation);
 protected:
-  bool m_yAuto;
-  /* In normalized settings, we put each axis so that 1cm = 2 units. For now,
-   * the screen has size 43.2mm * 57.6mm.
-   * We want:
-   *   2*NormalizedXHalfRange -> 57.6mm
-   *   2*1 -> 10.0mm
-   * So NormalizedXHalfRange = 5.76
-   * We want:
-   *   2*NormalizedYHalfRange -> 43.2mm * 170/240
-   *   2*1 -> 10.0mm
-   * So NormalizedYHalfRange = 3.06 */
-  constexpr static float NormalizedXHalfRange() { return 5.76f; }
-  constexpr static float NormalizedYHalfRange() { return 3.06f; }
-  static float clipped(float f, bool isMax);
-  InteractiveCurveViewRangeDelegate * m_delegate;
-private:
   constexpr static float k_upperMaxFloat = 1E+8f;
   constexpr static float k_lowerMaxFloat = 9E+7f;
   constexpr static float k_maxRatioPositionRange = 1E5f;
+  static float clipped(float x, bool isMax) { return Range1D::clipped(x, isMax, k_lowerMaxFloat, k_upperMaxFloat); }
+  /* In normalized settings, we put each axis so that 1cm = 2 units. For now,
+   * the screen has size 43.2mm * 57.6mm.
+   * We want:
+   *   2 * normalizedXHalfRange -> 57.6mm
+   *   2 * 1 unit -> 10.0mm
+   * So normalizedXHalfRange = 57.6mm * 1 unit / 10.0mm */
+  constexpr static float NormalizedXHalfRange(float unit) { return 5.76f * unit; }
+  /* In normalized settings, we put each axis so that 1cm = 2 units. For now,
+   * the screen has size 43.2mm * 57.6mm.
+   * We want:
+   *   2 * normalizedYHalfRange -> 43.2mm * 170/240
+   *   2 * 1 unit -> 10.0mm
+   * So normalizedYHalfRange = 43.2mm * 170/240 * 1 unit / 10.0mm */
+  constexpr static float NormalizedYHalfRange(float unit) {  return 3.06f * unit; }
+  bool m_yAuto;
+  InteractiveCurveViewRangeDelegate * m_delegate;
+private:
   void notifyRangeChange();
 };
 
-static_assert(InteractiveCurveViewRange::k_minFloat >= FLT_EPSILON, "InteractiveCurveViewRange's minimal float range is lower than float precision, it might draw uglily curves such as cos(x)^2+sin(x)^2");
 static_assert(Ion::Display::WidthInTenthOfMillimeter == 576, "Use the new screen width to compute Shared::InteractiveCurveViewRange::NormalizedXHalfRange");
 static_assert(Ion::Display::HeightInTenthOfMillimeter == 432, "Use the new screen height to compute Shared::InteractiveCurveViewRange::NormalizedYHalfRange");
 
 typedef void (InteractiveCurveViewRange::*ParameterSetterPointer)(float);
-typedef float (InteractiveCurveViewRange::*ParameterGetterPointer)();
+typedef float (InteractiveCurveViewRange::*ParameterGetterPointer)() const;
 typedef void (InteractiveCurveViewRange::*RangeMethodPointer)();
 
 }

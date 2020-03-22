@@ -1,6 +1,7 @@
 #include "apps_container.h"
 #include "apps_container_storage.h"
 #include "global_preferences.h"
+#include "exam_mode_configuration.h"
 #include <ion.h>
 #include <poincare/init.h>
 #include <poincare/exception_checkpoint.h>
@@ -10,48 +11,6 @@ extern "C" {
 }
 
 using namespace Shared;
-
-#if EPSILON_BOOT_PROMPT == EPSILON_BETA_PROMPT
-
-static I18n::Message sPromptMessages[] = {
-  I18n::Message::BetaVersion,
-  I18n::Message::BetaVersionMessage1,
-  I18n::Message::BetaVersionMessage2,
-  I18n::Message::BetaVersionMessage3,
-  I18n::Message::BlankMessage,
-  I18n::Message::BetaVersionMessage4,
-  I18n::Message::BetaVersionMessage5,
-  I18n::Message::BetaVersionMessage6};
-
-static KDColor sPromptColors[] = {
-  KDColorBlack,
-  KDColorBlack,
-  KDColorBlack,
-  KDColorBlack,
-  KDColorWhite,
-  KDColorBlack,
-  KDColorBlack,
-  Palette::YellowDark};
-
-#elif EPSILON_BOOT_PROMPT == EPSILON_UPDATE_PROMPT
-
-static I18n::Message sPromptMessages[] = {
-  I18n::Message::UpdateAvailable,
-  I18n::Message::UpdateMessage1,
-  I18n::Message::UpdateMessage2,
-  I18n::Message::BlankMessage,
-  I18n::Message::UpdateMessage3,
-  I18n::Message::UpdateMessage4};
-
-static KDColor sPromptColors[] = {
-  KDColorBlack,
-  KDColorBlack,
-  KDColorBlack,
-  KDColorWhite,
-  KDColorBlack,
-  Palette::YellowDark};
-
-#endif
 
 AppsContainer * AppsContainer::sharedAppsContainer() {
   static AppsContainerStorage appsContainerStorage;
@@ -65,11 +24,7 @@ AppsContainer::AppsContainer() :
   m_globalContext(),
   m_variableBoxController(),
   m_examPopUpController(this),
-#if EPSILON_BOOT_PROMPT == EPSILON_BETA_PROMPT
-  m_promptController(sPromptMessages, sPromptColors, 8),
-#elif EPSILON_BOOT_PROMPT == EPSILON_UPDATE_PROMPT
-  m_promptController(sPromptMessages, sPromptColors, 6),
-#endif
+  m_promptController(k_promptMessages, k_promptColors, k_promptNumberOfMessages),
   m_batteryTimer(),
   m_suspendTimer(),
   m_backlightDimmingTimer(),
@@ -78,7 +33,7 @@ AppsContainer::AppsContainer() :
   m_hardwareTestSnapshot(),
   m_usbConnectedSnapshot()
 {
-  m_emptyBatteryWindow.setFrame(KDRect(0, 0, Ion::Display::Width, Ion::Display::Height));
+  m_emptyBatteryWindow.setFrame(KDRect(0, 0, Ion::Display::Width, Ion::Display::Height), false);
 #if __EMSCRIPTEN__
   /* AppsContainer::poincareCircuitBreaker uses Ion::Keyboard::scan(), which
    * calls emscripten_sleep. If we set the poincare circuit breaker, we would
@@ -137,11 +92,10 @@ VariableBoxController * AppsContainer::variableBoxController() {
 void AppsContainer::suspend(bool checkIfOnOffKeyReleased) {
   resetShiftAlphaStatus();
   GlobalPreferences * globalPreferences = GlobalPreferences::sharedGlobalPreferences();
-#ifdef EPSILON_BOOT_PROMPT
-  if (s_activeApp->snapshot()!= onBoardingAppSnapshot() && s_activeApp->snapshot() != hardwareTestAppSnapshot() && globalPreferences->showPopUp()) {
-    s_activeApp->displayModalViewController(&m_promptController, 0.f, 0.f);
+  // Display the prompt if it has a message to display
+  if (promptController() != nullptr && s_activeApp->snapshot()!= onBoardingAppSnapshot() && s_activeApp->snapshot() != hardwareTestAppSnapshot() && globalPreferences->showPopUp()) {
+    s_activeApp->displayModalViewController(promptController(), 0.f, 0.f);
   }
-#endif
   Ion::Power::suspend(checkIfOnOffKeyReleased);
   /* Ion::Power::suspend() completely shuts down the LCD controller. Therefore
    * the frame memory is lost. That's why we need to force a window redraw
@@ -215,8 +169,8 @@ bool AppsContainer::processEvent(Ion::Events::Event event) {
   // Warning: if the window is dirtied, you need to call window()->redraw()
   if (event == Ion::Events::USBPlug) {
     if (Ion::USB::isPlugged()) {
-      if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Activate) {
-        displayExamModePopUp(false);
+      if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
+        displayExamModePopUp(GlobalPreferences::ExamMode::Off);
         window()->redraw();
       } else {
         Ion::USB::enable();
@@ -254,7 +208,15 @@ bool AppsContainer::switchTo(App::Snapshot * snapshot) {
 }
 
 void AppsContainer::run() {
-  window()->setFrame(KDRect(0, 0, Ion::Display::Width, Ion::Display::Height));
+  KDRect screenRect = KDRect(0, 0, Ion::Display::Width, Ion::Display::Height);
+  window()->setFrame(screenRect, false);
+  /* We push a white screen here, because fetching the exam mode takes some time
+   * and it is visible when reflashing a N0100 (there is some noise on the
+   * screen before the logo appears). */
+  Ion::Display::pushRectUniform(screenRect, KDColorWhite);
+  if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
+    activateExamMode(GlobalPreferences::sharedGlobalPreferences()->examMode());
+  }
   refreshPreferences();
 
   /* ExceptionCheckpoint stores the value of the stack pointer when setjump is
@@ -267,12 +229,7 @@ void AppsContainer::run() {
     /* Normal execution. The exception checkpoint must be created before
      * switching to the first app, because the first app might create nodes on
      * the pool. */
-     bool switched =
-#if EPSILON_ONBOARDING_APP
-       switchTo(onBoardingAppSnapshot());
-#else
-       switchTo(appSnapshotAtIndex(numberOfApps() == 2 ? 1 : 0));
-#endif
+    bool switched = switchTo(initialAppSnapshot());
     assert(switched);
     (void) switched; // Silence compilation warning about unused variable.
   } else {
@@ -319,8 +276,8 @@ void AppsContainer::reloadTitleBarView() {
   m_window.reloadTitleBarView();
 }
 
-void AppsContainer::displayExamModePopUp(bool activate) {
-  m_examPopUpController.setActivatingExamMode(activate);
+void AppsContainer::displayExamModePopUp(GlobalPreferences::ExamMode mode) {
+  m_examPopUpController.setTargetExamMode(mode);
   s_activeApp->displayModalViewController(&m_examPopUpController, 0.f, 0.f, Metric::ExamPopUpTopMargin, Metric::PopUpRightMargin, Metric::ExamPopUpBottomMargin, Metric::PopUpLeftMargin);
 }
 
@@ -335,7 +292,7 @@ void AppsContainer::shutdownDueToLowBattery() {
   }
   while (Ion::Battery::level() == Ion::Battery::Charge::EMPTY) {
     Ion::Backlight::setBrightness(0);
-    if (GlobalPreferences::sharedGlobalPreferences()->examMode() == GlobalPreferences::ExamMode::Deactivate) {
+    if (!GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
       /* Unless the LED is lit up for the exam mode, switch off the LED. IF the
        * low battery event happened during the Power-On Self-Test, a LED might
        * have stayed lit up. */
@@ -357,14 +314,22 @@ bool AppsContainer::updateAlphaLock() {
   return m_window.updateAlphaLock();
 }
 
-#ifdef EPSILON_BOOT_PROMPT
 OnBoarding::PopUpController * AppsContainer::promptController() {
+  if (k_promptNumberOfMessages == 0) {
+    return nullptr;
+  }
   return &m_promptController;
 }
-#endif
 
 void AppsContainer::redrawWindow() {
   m_window.redraw();
+}
+
+void AppsContainer::activateExamMode(GlobalPreferences::ExamMode examMode) {
+  assert(examMode != GlobalPreferences::ExamMode::Off && examMode != GlobalPreferences::ExamMode::Unknown);
+  reset();
+  Ion::LED::setColor(ExamModeConfiguration::examModeColor(examMode));
+  Ion::LED::setBlinking(1000, 0.1f);
 }
 
 void AppsContainer::examDeactivatingPopUpIsDismissed() {

@@ -31,6 +31,7 @@
 #include "py/mpstate.h"
 #include "py/qstr.h"
 #include "py/gc.h"
+#include "py/runtime.h"
 
 // NOTE: we are using linear arrays to store and search for qstr's (unique strings, interned strings)
 // ultimately we will replace this with a static hash table of some kind
@@ -80,6 +81,10 @@
 #define QSTR_EXIT()
 #endif
 
+// Initial number of entries for qstr pool, set so that the first dynamically
+// allocated pool is twice this size.  The value here must be <= MP_QSTRnumber_of.
+#define MICROPY_ALLOC_QSTR_ENTRIES_INIT (10)
+
 // this must match the equivalent function in makeqstrdata.py
 mp_uint_t qstr_compute_hash(const byte *data, size_t len) {
     // djb2 algorithm; see http://www.cse.yorku.ca/~oz/hash.html
@@ -98,7 +103,7 @@ mp_uint_t qstr_compute_hash(const byte *data, size_t len) {
 const qstr_pool_t mp_qstr_const_pool = {
     NULL,               // no previous pool
     0,                  // no previous pool
-    10,                 // set so that the first dynamically allocated pool is twice this size; must be <= the len (just below)
+    MICROPY_ALLOC_QSTR_ENTRIES_INIT,
     MP_QSTRnumber_of,   // corresponds to number of strings in array just below
     {
 #ifndef NO_QSTR
@@ -141,14 +146,19 @@ STATIC qstr qstr_add(const byte *q_ptr) {
 
     // make sure we have room in the pool for a new qstr
     if (MP_STATE_VM(last_pool)->len >= MP_STATE_VM(last_pool)->alloc) {
-        qstr_pool_t *pool = m_new_obj_var_maybe(qstr_pool_t, const char*, MP_STATE_VM(last_pool)->alloc * 2);
+        size_t new_alloc = MP_STATE_VM(last_pool)->alloc * 2;
+        #ifdef MICROPY_QSTR_EXTRA_POOL
+        // Put a lower bound on the allocation size in case the extra qstr pool has few entries
+        new_alloc = MAX(MICROPY_ALLOC_QSTR_ENTRIES_INIT, new_alloc);
+        #endif
+        qstr_pool_t *pool = m_new_obj_var_maybe(qstr_pool_t, const char*, new_alloc);
         if (pool == NULL) {
             QSTR_EXIT();
-            m_malloc_fail(MP_STATE_VM(last_pool)->alloc * 2);
+            m_malloc_fail(new_alloc);
         }
         pool->prev = MP_STATE_VM(last_pool);
         pool->total_prev_len = MP_STATE_VM(last_pool)->total_prev_len + MP_STATE_VM(last_pool)->len;
-        pool->alloc = MP_STATE_VM(last_pool)->alloc * 2;
+        pool->alloc = new_alloc;
         pool->len = 0;
         MP_STATE_VM(last_pool) = pool;
         DEBUG_printf("QSTR: allocate new pool of size %d\n", MP_STATE_VM(last_pool)->alloc);
@@ -183,11 +193,16 @@ qstr qstr_from_str(const char *str) {
 }
 
 qstr qstr_from_strn(const char *str, size_t len) {
-    assert(len < (1 << (8 * MICROPY_QSTR_BYTES_IN_LEN)));
     QSTR_ENTER();
     qstr q = qstr_find_strn(str, len);
     if (q == 0) {
         // qstr does not exist in interned pool so need to add it
+
+        // check that len is not too big
+        if (len >= (1 << (8 * MICROPY_QSTR_BYTES_IN_LEN))) {
+            QSTR_EXIT();
+            mp_raise_msg(&mp_type_RuntimeError, "name too long");
+        }
 
         // compute number of bytes needed to intern this string
         size_t n_bytes = MICROPY_QSTR_BYTES_IN_HASH + MICROPY_QSTR_BYTES_IN_LEN + len + 1;
@@ -242,7 +257,8 @@ qstr qstr_from_strn(const char *str, size_t len) {
 }
 
 mp_uint_t qstr_hash(qstr q) {
-    return Q_GET_HASH(find_qstr(q));
+    const byte *qd = find_qstr(q);
+    return Q_GET_HASH(qd);
 }
 
 size_t qstr_len(qstr q) {

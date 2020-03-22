@@ -15,17 +15,15 @@ public:
   // Responder
   void didBecomeFirstResponder() override;
 private:
-  constexpr static int k_textFieldBufferSize = TextField::maxBufferSize();
   constexpr static KDCoordinate k_bufferTextWidth = 35;
   constexpr static KDCoordinate k_textFieldVerticalMargin = 3;
   constexpr static KDCoordinate k_borderWidth = 1;
   int numberOfSubviews() const override { return 2; }
   View * subviewAtIndex(int index) override;
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
   KDRect textFieldFrame() const;
   BufferTextView m_bufferTextView;
   TextField m_textField;
-  char m_textFieldBuffer[k_textFieldBufferSize];
 };
 
 }

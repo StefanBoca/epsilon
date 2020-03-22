@@ -2,11 +2,12 @@
 #define GRAPH_APP_H
 
 #include <escher.h>
-#include "cartesian_function_store.h"
+#include "continuous_function_store.h"
 #include "graph/graph_controller.h"
 #include "list/list_controller.h"
 #include "values/values_controller.h"
 #include "../shared/function_app.h"
+#include "../shared/interval.h"
 
 namespace Graph {
 
@@ -22,21 +23,39 @@ public:
   public:
     Snapshot();
     App * unpack(Container * container) override;
+    void reset() override;
     Descriptor * descriptor() override;
-    CartesianFunctionStore * functionStore() override;
-    Shared::InteractiveCurveViewRange * graphRange();
+    ContinuousFunctionStore * functionStore() override { return &m_functionStore; }
+    Shared::InteractiveCurveViewRange * graphRange() { return &m_graphRange; }
+    Shared::Interval * intervalForType(Shared::ContinuousFunction::PlotType plotType) {
+      return m_interval + static_cast<size_t>(plotType);
+    }
   private:
     void tidy() override;
-    CartesianFunctionStore m_functionStore;
+    ContinuousFunctionStore m_functionStore;
     Shared::InteractiveCurveViewRange m_graphRange;
+    Shared::Interval m_interval[Shared::ContinuousFunction::k_numberOfPlotTypes];
   };
   static App * app() {
     return static_cast<App *>(Container::activeApp());
   }
-  InputViewController * inputViewController() override;
-  char XNT() override;
+  Snapshot * snapshot() const {
+    return static_cast<Snapshot *>(::App::snapshot());
+  }
+  TELEMETRY_ID("Graph");
+  bool XNTCanBeOverriden() const override { return false; }
+  CodePoint XNT() override;
   NestedMenuController * variableBoxForInputEventHandler(InputEventHandler * textInput) override;
-  CartesianFunctionStore * functionStore() override { return static_cast<CartesianFunctionStore *>(Shared::FunctionApp::functionStore()); }
+  ContinuousFunctionStore * functionStore() override { return snapshot()->functionStore(); }
+  Shared::Interval * intervalForType(Shared::ContinuousFunction::PlotType plotType) {
+    return snapshot()->intervalForType(plotType);
+  }
+  ValuesController * valuesController() override {
+    return &m_valuesController;
+  }
+  InputViewController * inputViewController() override {
+    return &m_inputViewController;
+  }
 private:
   App(Snapshot * snapshot);
   ListController m_listController;

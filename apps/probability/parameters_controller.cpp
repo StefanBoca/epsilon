@@ -6,7 +6,7 @@
 
 namespace Probability {
 
-ParametersController::ContentView::ContentView(Responder * parentResponder, SelectableTableView * selectableTableView) :
+ParametersController::ContentView::ContentView(SelectableTableView * selectableTableView) :
   m_numberOfParameters(1),
   m_titleView(KDFont::SmallFont, I18n::Message::ChooseParameters, 0.5f, 0.5f, Palette::GreyDark, Palette::WallScreen),
   m_firstParameterDefinition(KDFont::SmallFont, (I18n::Message)0, 0.5f, 0.5f, KDColorBlack, Palette::WallScreen),
@@ -50,41 +50,40 @@ View * ParametersController::ContentView::subviewAtIndex(int index) {
   return &m_secondParameterDefinition;
 }
 
-void ParametersController::ContentView::layoutSubviews() {
+void ParametersController::ContentView::layoutSubviews(bool force) {
   KDCoordinate titleHeight = KDFont::SmallFont->glyphSize().height()+k_titleMargin;
-  m_titleView.setFrame(KDRect(0, 0, bounds().width(), titleHeight));
+  m_titleView.setFrame(KDRect(0, 0, bounds().width(), titleHeight), force);
   KDCoordinate tableHeight = m_selectableTableView->minimalSizeForOptimalDisplay().height();
-  m_selectableTableView->setFrame(KDRect(0, titleHeight, bounds().width(),  tableHeight));
+  m_selectableTableView->setFrame(KDRect(0, titleHeight, bounds().width(),  tableHeight), force);
   KDCoordinate textHeight = KDFont::SmallFont->glyphSize().height();
   KDCoordinate defOrigin = (titleHeight+tableHeight)/2+(bounds().height()-textHeight)/2;
-  m_secondParameterDefinition.setFrame(KDRectZero);
+  m_secondParameterDefinition.setFrame(KDRectZero, force);
   if (m_numberOfParameters == 2) {
     defOrigin = (titleHeight+tableHeight)/2+(bounds().height()-2*textHeight-k_textMargin)/2;
-    m_secondParameterDefinition.setFrame(KDRect(0, defOrigin+textHeight+k_textMargin, bounds().width(), textHeight));
+    m_secondParameterDefinition.setFrame(KDRect(0, defOrigin+textHeight+k_textMargin, bounds().width(), textHeight), force);
   }
-  m_firstParameterDefinition.setFrame(KDRect(0, defOrigin, bounds().width(), textHeight));
+  m_firstParameterDefinition.setFrame(KDRect(0, defOrigin, bounds().width(), textHeight), force);
 }
 
 /* Parameters Controller */
 
-ParametersController::ParametersController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Law * law, CalculationController * calculationController) :
+ParametersController::ParametersController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, Distribution * distribution, CalculationController * calculationController) :
   FloatParameterController(parentResponder),
-  m_contentView(this, &m_selectableTableView),
+  m_contentView(&m_selectableTableView),
   m_menuListCell{},
-  m_law(law),
+  m_distribution(distribution),
   m_calculationController(calculationController)
 {
-  assert(m_law != nullptr);
+  assert(m_distribution != nullptr);
   m_okButton.setMessage(I18n::Message::Next);
   for (int i = 0; i < k_maxNumberOfCells; i++) {
     m_menuListCell[i].setParentResponder(&m_selectableTableView);
     m_menuListCell[i].textField()->setDelegates(inputEventHandlerDelegate, this);
-    m_menuListCell[i].textField()->setDraftTextBuffer(m_draftTextBuffer);
   }
 }
 
 const char * ParametersController::title() {
-  return I18n::translate(m_law->title());
+  return I18n::translate(m_distribution->title());
 }
 
 bool ParametersController::handleEvent(Ion::Events::Event event) {
@@ -104,16 +103,16 @@ void ParametersController::didBecomeFirstResponder() {
 }
 
 void ParametersController::viewWillAppear() {
-  m_contentView.setNumberOfParameters(m_law->numberOfParameter());
-  for (int i = 0; i < m_law->numberOfParameter(); i++) {
-    m_contentView.parameterDefinitionAtIndex(i)->setMessage(m_law->parameterDefinitionAtIndex(i));
+  m_contentView.setNumberOfParameters(m_distribution->numberOfParameter());
+  for (int i = 0; i < m_distribution->numberOfParameter(); i++) {
+    m_contentView.parameterDefinitionAtIndex(i)->setMessage(m_distribution->parameterDefinitionAtIndex(i));
   }
   m_contentView.layoutSubviews();
   FloatParameterController::viewWillAppear();
 }
 
-int ParametersController::numberOfRows() {
-  return 1+m_law->numberOfParameter();
+int ParametersController::numberOfRows() const {
+  return 1+m_distribution->numberOfParameter();
 }
 
 void ParametersController::willDisplayCellForIndex(HighlightCell * cell, int index) {
@@ -124,7 +123,7 @@ void ParametersController::willDisplayCellForIndex(HighlightCell * cell, int ind
     return;
   }
   MessageTableCellWithEditableText * myCell = (MessageTableCellWithEditableText *) cell;
-  myCell->setMessage(m_law->parameterNameAtIndex(index));
+  myCell->setMessage(m_distribution->parameterNameAtIndex(index));
   FloatParameterController::willDisplayCellForIndex(cell, index);
 }
 
@@ -135,19 +134,19 @@ HighlightCell * ParametersController::reusableParameterCell(int index, int type)
 }
 
 int ParametersController::reusableParameterCellCount(int type) {
-  return m_law->numberOfParameter();
+  return m_distribution->numberOfParameter();
 }
 
-double ParametersController::parameterAtIndex(int index) {
-  return m_law->parameterValueAtIndex(index);
+float ParametersController::parameterAtIndex(int index) {
+  return m_distribution->parameterValueAtIndex(index);
 }
 
-bool ParametersController::setParameterAtIndex(int parameterIndex, double f) {
-  if (!m_law->authorizedValueAtIndex(f, parameterIndex)) {
+bool ParametersController::setParameterAtIndex(int parameterIndex, float f) {
+  if (!m_distribution->authorizedValueAtIndex(f, parameterIndex)) {
     Container::activeApp()->displayWarning(I18n::Message::ForbiddenValue);
     return false;
   }
-  m_law->setParameterAtIndex(f, parameterIndex);
+  m_distribution->setParameterAtIndex(f, parameterIndex);
   m_calculationController->setCalculationAccordingToIndex(0, true);
   return true;
 }

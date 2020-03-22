@@ -23,9 +23,10 @@ public:
   void removeGreySquares();
 
   // LayoutNode
-  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
-  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
+  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
+  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
   void willAddSiblingToEmptyChildAtIndex(int childIndex) override;
+  void deleteBeforeCursor(LayoutCursor * cursor) override;
 
   // SerializableNode
   int serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const override;
@@ -42,7 +43,7 @@ protected:
   // LayoutNode
   KDSize computeSize() override;
   KDPoint positionOfChild(LayoutNode * l) override;
-  void moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor,  bool * shouldRecomputeLayout, bool equivalentPositionVisited) override;
+  void moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) override;
 
 private:
   // MatrixNode
@@ -52,7 +53,7 @@ private:
   bool hasGreySquares() const;
 
   // LayoutNode
-  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) override;
+  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart = nullptr, Layout * selectionEnd = nullptr, KDColor selectionColor = KDColorRed) override;
   void didReplaceChildAtIndex(int index, LayoutCursor * cursor, bool force) override;
 };
 
